@@ -1636,7 +1636,7 @@ func TestSignatureScript(t *testing.T) {
 	t.Parallel()
 
 	privKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), privKeyD)
-
+	signable := NewPrivateKeySignable(privKey)
 nexttest:
 	for i := range sigScriptTests {
 		tx := wire.NewMsgTx(wire.TxVersion)
@@ -1661,7 +1661,7 @@ nexttest:
 			}
 			script, err = SignatureScript(tx, idx,
 				sigScriptTests[i].inputs[j].txout.PkScript,
-				sigScriptTests[i].hashType, privKey,
+				sigScriptTests[i].hashType, signable,
 				sigScriptTests[i].compress)
 
 			if (err == nil) != sigScriptTests[i].inputs[j].sigscriptGenerates {
