@@ -750,6 +750,7 @@ func TestSegwitExemption(t *testing.T) {
 
 func TestScriptVerifyInputSigChecks(t *testing.T) {
 	priv, err := bchec.NewPrivateKey(bchec.S256())
+	signable := NewPrivateKeySignable(priv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -836,7 +837,7 @@ func TestScriptVerifyInputSigChecks(t *testing.T) {
 			LockTime: 0,
 		}
 
-		sig, err := RawTxInSchnorrSignature(tx, 0, redeemScript, SigHashAll, priv, 0)
+		sig, err := RawTxInSchnorrSignature(tx, 0, redeemScript, SigHashAll, signable, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
