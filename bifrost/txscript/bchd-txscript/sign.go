@@ -108,7 +108,7 @@ func SignatureScript(tx *wire.MsgTx, idx int, amt int64, subscript []byte,
 // signature hashing algorithm.
 func LegacySignatureScript(tx *wire.MsgTx, idx int, subscript []byte,
 	hashType SigHashType, signable Signable, compress bool) ([]byte, error) {
-	sig, err := LegacyTxInSignature(tx, idx, subscript, hashType, Signable)
+	sig, err := LegacyTxInSignature(tx, idx, subscript, hashType, signable)
 	if err != nil {
 		return nil, err
 	}
