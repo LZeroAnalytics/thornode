@@ -1,4 +1,4 @@
-module gitlab.com/thorchain/txscript
+module gitlab.com/thorchain/bifrost/txscript
 
 go 1.14
 
