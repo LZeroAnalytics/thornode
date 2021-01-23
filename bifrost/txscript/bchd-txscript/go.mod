@@ -1,4 +1,4 @@
-module gitlab.com/thorchain/bchd-txscript
+module gitlab.com/thorchain/bifrost/bchd-txscript
 
 go 1.15
 
