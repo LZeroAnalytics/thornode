@@ -1,4 +1,4 @@
-module gitlab.com/thorchain/ltcd-txscript
+module gitlab.com/thorchain/bifrost/ltcd-txscript
 
 go 1.15
 
