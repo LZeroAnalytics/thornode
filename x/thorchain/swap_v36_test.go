@@ -4,157 +4,23 @@ import (
 	"errors"
 	"os"
 
-	"github.com/blang/semver"
 	. "gopkg.in/check.v1"
 
 	"gitlab.com/thorchain/thornode/common"
 	"gitlab.com/thorchain/thornode/common/cosmos"
-	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
-	"gitlab.com/thorchain/thornode/x/thorchain/types"
 )
 
-type SwapSuite struct{}
+type SwapSuiteV36 struct{}
 
-var _ = Suite(&SwapSuite{})
+var _ = Suite(&SwapSuiteV36{})
 
-func (s *SwapSuite) SetUpSuite(c *C) {
+func (s *SwapSuiteV36) SetUpSuite(c *C) {
 	err := os.Setenv("NET", "other")
 	c.Assert(err, IsNil)
 	SetupConfigForTest()
 }
 
-type TestSwapKeeper struct {
-	keeper.KVStoreDummy
-}
-
-func (k *TestSwapKeeper) PoolExist(ctx cosmos.Context, asset common.Asset) bool {
-	if asset.Equals(common.Asset{Chain: common.BNBChain, Symbol: "NOTEXIST", Ticker: "NOTEXIST"}) {
-		return false
-	}
-	return true
-}
-
-func (k *TestSwapKeeper) GetPool(ctx cosmos.Context, asset common.Asset) (types.Pool, error) {
-	if asset.Equals(common.Asset{Chain: common.BNBChain, Symbol: "NOTEXIST", Ticker: "NOTEXIST"}) {
-		return types.Pool{}, nil
-	} else if asset.Equals(common.BCHAsset) {
-		return types.Pool{
-			BalanceRune:  cosmos.NewUint(100).MulUint64(common.One),
-			BalanceAsset: cosmos.NewUint(100).MulUint64(common.One),
-			PoolUnits:    cosmos.NewUint(100).MulUint64(common.One),
-			SynthUnits:   cosmos.ZeroUint(),
-			Status:       PoolStaged,
-			Asset:        asset,
-		}, nil
-	} else {
-		return types.Pool{
-			BalanceRune:  cosmos.NewUint(100).MulUint64(common.One),
-			BalanceAsset: cosmos.NewUint(100).MulUint64(common.One),
-			PoolUnits:    cosmos.NewUint(100).MulUint64(common.One),
-			SynthUnits:   cosmos.ZeroUint(),
-			Status:       PoolAvailable,
-			Asset:        asset,
-		}, nil
-	}
-}
-func (k *TestSwapKeeper) SetPool(ctx cosmos.Context, ps types.Pool) error { return nil }
-
-func (k *TestSwapKeeper) GetLiquidityProvider(ctx cosmos.Context, asset common.Asset, addr common.Address) (types.LiquidityProvider, error) {
-	if asset.Equals(common.Asset{Chain: common.BNBChain, Symbol: "NOTEXISTSTICKER", Ticker: "NOTEXISTSTICKER"}) {
-		return types.LiquidityProvider{}, errors.New("you asked for it")
-	}
-	return LiquidityProvider{
-		Asset:        asset,
-		RuneAddress:  addr,
-		AssetAddress: addr,
-		Units:        cosmos.NewUint(100),
-		PendingRune:  cosmos.ZeroUint(),
-	}, nil
-}
-
-func (k *TestSwapKeeper) SetLiquidityProvider(ctx cosmos.Context, ps types.LiquidityProvider) {}
-
-func (k *TestSwapKeeper) AddToLiquidityFees(ctx cosmos.Context, asset common.Asset, fs cosmos.Uint) error {
-	return nil
-}
-
-func (k *TestSwapKeeper) GetLowestActiveVersion(ctx cosmos.Context) semver.Version {
-	return GetCurrentVersion()
-}
-
-func (k *TestSwapKeeper) AddFeeToReserve(ctx cosmos.Context, fee cosmos.Uint) error { return nil }
-
-func (k *TestSwapKeeper) GetGas(ctx cosmos.Context, _ common.Asset) ([]cosmos.Uint, error) {
-	return []cosmos.Uint{cosmos.NewUint(37500), cosmos.NewUint(30000)}, nil
-}
-
-func (k *TestSwapKeeper) GetAsgardVaultsByStatus(ctx cosmos.Context, status VaultStatus) (Vaults, error) {
-	vault := GetRandomVault()
-	vault.Coins = common.Coins{
-		common.NewCoin(common.BNBAsset, cosmos.NewUint(10000*common.One)),
-	}
-	return Vaults{
-		vault,
-	}, nil
-}
-
-func (k *TestSwapKeeper) GetObservedTxInVoter(ctx cosmos.Context, hash common.TxID) (ObservedTxVoter, error) {
-	return ObservedTxVoter{
-		TxID: hash,
-	}, nil
-}
-
-func (k *TestSwapKeeper) ListActiveNodeAccounts(ctx cosmos.Context) (NodeAccounts, error) {
-	return NodeAccounts{}, nil
-}
-
-func (k *TestSwapKeeper) GetBlockOut(ctx cosmos.Context) (*TxOut, error) {
-	return NewTxOut(ctx.BlockHeight()), nil
-}
-
-func (k *TestSwapKeeper) GetTxOut(ctx cosmos.Context, _ int64) (*TxOut, error) {
-	return NewTxOut(ctx.BlockHeight()), nil
-}
-
-func (k *TestSwapKeeper) GetLeastSecure(ctx cosmos.Context, vaults Vaults, _ int64) Vault {
-	return vaults[0]
-}
-
-func (k TestSwapKeeper) SortBySecurity(_ cosmos.Context, vaults Vaults, _ int64) Vaults {
-	return vaults
-}
-func (k *TestSwapKeeper) AppendTxOut(_ cosmos.Context, _ int64, _ TxOutItem) error { return nil }
-func (k *TestSwapKeeper) GetNetworkFee(ctx cosmos.Context, chain common.Chain) (NetworkFee, error) {
-	if chain.Equals(common.BNBChain) {
-		return NetworkFee{
-			Chain:              common.BNBChain,
-			TransactionSize:    1,
-			TransactionFeeRate: 37500,
-		}, nil
-	}
-	if chain.Equals(common.THORChain) {
-		return NetworkFee{
-			Chain:              common.THORChain,
-			TransactionSize:    1,
-			TransactionFeeRate: 1_00000000,
-		}, nil
-	}
-	return NetworkFee{}, kaboom
-}
-
-func (k *TestSwapKeeper) SendFromModuleToModule(ctx cosmos.Context, from, to string, coin common.Coins) error {
-	return nil
-}
-
-func (k *TestSwapKeeper) BurnFromModule(ctx cosmos.Context, module string, coin common.Coin) error {
-	return nil
-}
-
-func (k *TestSwapKeeper) MintToModule(ctx cosmos.Context, module string, coin common.Coin) error {
-	return nil
-}
-
-func (s *SwapSuite) TestSwap(c *C) {
+func (s *SwapSuiteV36) TestSwap(c *C) {
 	poolStorage := &TestSwapKeeper{}
 	ctx, _ := setupKeeperForTest(c)
 	inputs := []struct {
@@ -369,7 +235,7 @@ func (s *SwapSuite) TestSwap(c *C) {
 		m.BeginBlock(ctx)
 		m.txOutStore = NewTxStoreDummy()
 
-		amount, evts, err := NewSwapperV1().swap(ctx, poolStorage, tx, item.target, item.destination, item.tradeTarget, cosmos.NewUint(1000_000), 2, m)
+		amount, evts, err := NewSwapperV36().swap(ctx, poolStorage, tx, item.target, item.destination, item.tradeTarget, cosmos.NewUint(1000_000), 2, m)
 		if item.expectedErr == nil {
 			c.Assert(err, IsNil)
 			c.Assert(evts, HasLen, item.events)
@@ -384,7 +250,7 @@ func (s *SwapSuite) TestSwap(c *C) {
 	}
 }
 
-func (s *SwapSuite) TestSynthSwap(c *C) {
+func (s *SwapSuiteV36) TestSynthSwap(c *C) {
 	c.Skip("synthetics are temporarily disabled")
 	ctx, k := setupKeeperForTest(c)
 	pool := NewPool()
@@ -411,7 +277,7 @@ func (s *SwapSuite) TestSynthSwap(c *C) {
 	m.txOutStore = NewTxStoreDummy()
 
 	// swap rune --> synth
-	amount, _, err := NewSwapperV1().swap(ctx, k, tx, common.BNBAsset, addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
+	amount, _, err := NewSwapperV36().swap(ctx, k, tx, common.BNBAsset, addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
 	c.Assert(err, IsNil)
 	c.Check(amount.Uint64(), Equals, uint64(146354579))
 	pool, err = k.GetPool(ctx, common.BNBAsset)
@@ -425,7 +291,7 @@ func (s *SwapSuite) TestSynthSwap(c *C) {
 	c.Assert(k.SendFromModuleToModule(ctx, ModuleName, AsgardName, common.NewCoins(coin)), IsNil)
 
 	// do another rune --> synth
-	amount, _, err = NewSwapperV1().swap(ctx, k, tx, common.BNBAsset, addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
+	amount, _, err = NewSwapperV36().swap(ctx, k, tx, common.BNBAsset, addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
 	c.Assert(err, IsNil)
 	c.Check(amount.Uint64(), Equals, uint64(140317475), Commentf("%d", amount.Uint64()))
 	pool, err = k.GetPool(ctx, common.BNBAsset)
@@ -453,7 +319,7 @@ func (s *SwapSuite) TestSynthSwap(c *C) {
 	// swap synth --> rune again
 	totalSupply := k.GetTotalSupply(ctx, common.BNBAsset.GetSyntheticAsset())
 	tx.Coins = common.NewCoins(common.NewCoin(common.BNBAsset.GetSyntheticAsset(), totalSupply))
-	amount, _, err = NewSwapperV1().swap(ctx, k, tx, common.RuneAsset(), addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
+	amount, _, err = NewSwapperV36().swap(ctx, k, tx, common.RuneAsset(), addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
 	c.Assert(err, IsNil)
 	c.Check(amount.Uint64(), Equals, uint64(4599823821), Commentf("%d", amount.Uint64()))
 	pool, err = k.GetPool(ctx, common.BNBAsset)
@@ -461,57 +327,5 @@ func (s *SwapSuite) TestSynthSwap(c *C) {
 	c.Check(pool.BalanceAsset.Uint64(), Equals, uint64(34*common.One))
 	c.Check(pool.BalanceRune.Uint64(), Equals, uint64(111504716364), Commentf("%d", pool.BalanceRune.Uint64()))
 	c.Check(pool.PoolUnits.Uint64(), Equals, uint64(111100000000), Commentf("%d", pool.PoolUnits.Uint64()))
-	c.Check(pool.SynthUnits.Uint64(), Equals, uint64(0), Commentf("%d", pool.SynthUnits.Uint64()))
-
-	// swap BNB.BNB -> BNB/BNB (external asset directly to synth)
-	tx1 := common.NewTx(
-		GetRandomTxHash(),
-		addr,
-		addr,
-		common.NewCoins(
-			common.NewCoin(common.BNBAsset, cosmos.NewUint(50*common.One)),
-		),
-		BNBGasFeeSingleton,
-		"",
-	)
-	tx.Chain = common.BNBChain
-	amount, _, err = NewSwapperV1().swap(ctx, k, tx1, common.BNBAsset, addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000), 2, m)
-	c.Assert(err, IsNil)
-	c.Check(amount.Uint64(), Equals, uint64(1985844476), Commentf("%d", amount.Uint64()))
-	pool, err = k.GetPool(ctx, common.BNBAsset)
-	c.Assert(err, IsNil)
-	c.Check(pool.BalanceAsset.Uint64(), Equals, uint64(84*common.One))
-	c.Check(pool.BalanceRune.Uint64(), Equals, uint64(111504716364), Commentf("%d", pool.BalanceRune.Uint64()))
-	c.Check(pool.PoolUnits.Uint64(), Equals, uint64(124483645124), Commentf("%d", pool.PoolUnits.Uint64()))
-	c.Check(pool.SynthUnits.Uint64(), Equals, uint64(13383645124), Commentf("%d", pool.SynthUnits.Uint64()))
-
-	// emit asset is not enough to pay for fee , then pool balance should be restored
-	tx2 := common.NewTx(
-		GetRandomTxHash(),
-		addr,
-		addr,
-		common.NewCoins(
-			common.NewCoin(common.BTCAsset, cosmos.NewUint(common.One/2)),
-		),
-		BNBGasFeeSingleton,
-		"",
-	)
-	tx.Chain = common.BNBChain
-	btcPool := NewPool()
-	btcPool.Asset = common.BTCAsset
-	btcPool.BalanceAsset = cosmos.NewUint(common.One)
-	btcPool.BalanceRune = cosmos.NewUint(common.One * 10)
-	btcPool.PoolUnits = cosmos.NewUint(100)
-	btcPool.SynthUnits = cosmos.ZeroUint()
-	c.Assert(k.SetPool(ctx, btcPool), IsNil)
-
-	amount, _, err = NewSwapperV1().swap(ctx, k, tx2, common.BTCAsset, addr, cosmos.ZeroUint(), cosmos.NewUint(1000_000_000_000), 2, m)
-	c.Assert(err, NotNil)
-	c.Check(amount.IsZero(), Equals, true)
-	pool, err = k.GetPool(ctx, common.BTCAsset)
-	c.Assert(err, IsNil)
-	c.Check(pool.BalanceAsset.Uint64(), Equals, uint64(common.One))
-	c.Check(pool.BalanceRune.Uint64(), Equals, uint64(10*common.One), Commentf("%d", pool.BalanceRune.Uint64()))
-	c.Check(pool.PoolUnits.Uint64(), Equals, uint64(100), Commentf("%d", pool.PoolUnits.Uint64()))
 	c.Check(pool.SynthUnits.Uint64(), Equals, uint64(0), Commentf("%d", pool.SynthUnits.Uint64()))
 }
