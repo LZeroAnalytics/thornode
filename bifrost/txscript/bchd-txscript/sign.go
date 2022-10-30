@@ -31,7 +31,7 @@ func RawTxInECDSASignature(tx *wire.MsgTx, idx int, subScript []byte,
 	}
 	signature, err := signable.SignECDSA(hash)
 	if err != nil {
-		return nil, fmt.Errorf("cannot sign tx input: %s", err)
+		return nil, fmt.Errorf("cannot sign tx input: %w", err)
 	}
 
 	return append(signature.Serialize(), byte(hashType)), nil
