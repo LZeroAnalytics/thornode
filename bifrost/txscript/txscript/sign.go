@@ -35,7 +35,7 @@ func RawTxInWitnessSignature(tx *wire.MsgTx, sigHashes *TxSigHashes, idx int,
 
 	signature, err := signable.Sign(hash)
 	if err != nil {
-		return nil, fmt.Errorf("cannot sign tx input: %s", err)
+		return nil, fmt.Errorf("cannot sign tx input: %w", err)
 	}
 
 	return append(signature.Serialize(), byte(hashType)), nil
