@@ -10,14 +10,14 @@ import (
 	"gitlab.com/thorchain/thornode/constants"
 )
 
-type PoolMgrVCUR struct{}
+type PoolMgrV116 struct{}
 
-func newPoolMgrVCUR() *PoolMgrVCUR {
-	return &PoolMgrVCUR{}
+func newPoolMgrV116() *PoolMgrV116 {
+	return &PoolMgrV116{}
 }
 
 // EndBlock cycle pools if required and if ragnarok is not in progress
-func (pm *PoolMgrVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
+func (pm *PoolMgrV116) EndBlock(ctx cosmos.Context, mgr Manager) error {
 	poolCycle, err := mgr.Keeper().GetMimir(ctx, constants.PoolCycle.String())
 	if poolCycle < 0 || err != nil {
 		poolCycle = mgr.GetConstants().GetInt64Value(constants.PoolCycle)
@@ -53,7 +53,7 @@ func (pm *PoolMgrVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 // The valid Staged pool with the highest rune depth is promoted to Available.
 // If there are more than the maximum available pools, the Available pool with
 // with the lowest rune depth is demoted to Staged
-func (pm *PoolMgrVCUR) cyclePools(ctx cosmos.Context, maxAvailablePools, minRunePoolDepth, stagedPoolCost int64, mgr Manager) error {
+func (pm *PoolMgrV116) cyclePools(ctx cosmos.Context, maxAvailablePools, minRunePoolDepth, stagedPoolCost int64, mgr Manager) error {
 	var availblePoolCount int64
 	onDeck := NewPool()        // currently staged pool that could get promoted
 	choppingBlock := NewPool() // currently available pool that is on the chopping block to being demoted
@@ -210,7 +210,7 @@ func (pm *PoolMgrVCUR) cyclePools(ctx cosmos.Context, maxAvailablePools, minRune
 }
 
 // poolMeetTradingVolumeCriteria check if pool generated the minimum amount of fees since last cycle
-func (pm *PoolMgrVCUR) poolMeetTradingVolumeCriteria(ctx cosmos.Context, mgr Manager, pool Pool, minPoolLiquidityFee cosmos.Uint) bool {
+func (pm *PoolMgrV116) poolMeetTradingVolumeCriteria(ctx cosmos.Context, mgr Manager, pool Pool, minPoolLiquidityFee cosmos.Uint) bool {
 	if minPoolLiquidityFee.IsZero() {
 		return true
 	}
@@ -225,7 +225,7 @@ func (pm *PoolMgrVCUR) poolMeetTradingVolumeCriteria(ctx cosmos.Context, mgr Man
 }
 
 // removeAssetFromVault set asset balance to zero for all vaults holding the asset
-func (pm *PoolMgrVCUR) removeAssetFromVault(ctx cosmos.Context, asset common.Asset, mgr Manager) {
+func (pm *PoolMgrV116) removeAssetFromVault(ctx cosmos.Context, asset common.Asset, mgr Manager) {
 	// zero vaults with the pool asset
 	vaultIter := mgr.Keeper().GetVaultIterator(ctx)
 	defer vaultIter.Close()
@@ -250,7 +250,7 @@ func (pm *PoolMgrVCUR) removeAssetFromVault(ctx cosmos.Context, asset common.Ass
 }
 
 // removeLiquidityProviders remove all lps for the given asset pool
-func (pm *PoolMgrVCUR) removeLiquidityProviders(ctx cosmos.Context, asset common.Asset, mgr Manager) {
+func (pm *PoolMgrV116) removeLiquidityProviders(ctx cosmos.Context, asset common.Asset, mgr Manager) {
 	iterator := mgr.Keeper().GetLiquidityProviderIterator(ctx, asset)
 	defer iterator.Close()
 	for ; iterator.Valid(); iterator.Next() {
@@ -285,14 +285,9 @@ func (pm *PoolMgrVCUR) removeLiquidityProviders(ctx cosmos.Context, asset common
 	}
 }
 
-func (pm *PoolMgrVCUR) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) {
+func (pm *PoolMgrV116) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) {
 	if atTVLCap(ctx, nil, mgr) {
 		ctx.Logger().Info("cleaning pending liquidity skipped due to TVL cap")
-		return
-	}
-
-	pendingLiquidityAgeLimit := mgr.Keeper().GetConfigInt64(ctx, constants.PendingLiquidityAgeLimit)
-	if pendingLiquidityAgeLimit <= 0 {
 		return
 	}
 
@@ -326,20 +321,28 @@ func (pm *PoolMgrVCUR) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) 
 		return
 	}
 
+	pendingLiquidityAgeLimit := mgr.Keeper().GetConfigInt64(ctx, constants.PendingLiquidityAgeLimit)
+	if pendingLiquidityAgeLimit <= 0 {
+		return
+	}
+
 	// process each pool within ageLimit evenly (in terms of blocks between
 	// each pool). For example, if ageLimit is 100 blocks, and we have 5 pools,
 	// we want to clean a pool every ~20 blocks, but each pool is only cleaned
 	// once every 100 blocks (just a different 100 blocks)
 	separator := pendingLiquidityAgeLimit / int64(len(pools))
-	if separator == 0 {
-		// If PendingLiquidityAgeLimit is smaller than the number of pools,
-		// still spread them out over the available blocks (and wrap around).
-		separator = 1
-	}
-	cleanupTarget := ctx.BlockHeight() % pendingLiquidityAgeLimit
 	for i, pool := range pools {
-		if cleanupTarget != (separator*int64(i))%pendingLiquidityAgeLimit {
-			continue
+		height := ctx.BlockHeight() % pendingLiquidityAgeLimit
+		cleanPoolHeight := separator * int64(i)
+		switch cleanPoolHeight {
+		case 0:
+			if height > 0 {
+				continue
+			}
+		default:
+			if height%cleanPoolHeight != 0 {
+				continue
+			}
 		}
 		if err := pm.commitPendingLiquidity(ctx, pool, mgr); err != nil {
 			ctx.Logger().Error("fail to clean pending liquidity", "pool", pool.Asset, "error", err)
@@ -348,7 +351,7 @@ func (pm *PoolMgrVCUR) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) 
 }
 
 // commitPendingLiquidity - for aged pending liquidity, commit it to the pool
-func (pm *PoolMgrVCUR) commitPendingLiquidity(ctx cosmos.Context, pool Pool, mgr Manager) error {
+func (pm *PoolMgrV116) commitPendingLiquidity(ctx cosmos.Context, pool Pool, mgr Manager) error {
 	ctx.Logger().Info("cleaning pending liquidity in pool", "pool", pool.Asset)
 	// track stats
 	var count int
