@@ -13,14 +13,14 @@ import (
 	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
 )
 
-type SwapperVCUR struct{}
+type SwapperV121 struct{}
 
-func newSwapperVCUR() *SwapperVCUR {
-	return &SwapperVCUR{}
+func newSwapperV121() *SwapperV121 {
+	return &SwapperV121{}
 }
 
 // validateMessage is trying to validate the legitimacy of the incoming message and decide whether THORNode can handle it
-func (s *SwapperVCUR) validateMessage(tx common.Tx, target common.Asset, destination common.Address) error {
+func (s *SwapperV121) validateMessage(tx common.Tx, target common.Asset, destination common.Address) error {
 	if err := tx.Valid(); err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func (s *SwapperVCUR) validateMessage(tx common.Tx, target common.Asset, destina
 	return nil
 }
 
-func (s *SwapperVCUR) Swap(ctx cosmos.Context,
+func (s *SwapperV121) Swap(ctx cosmos.Context,
 	keeper keeper.Keeper,
 	tx common.Tx,
 	target common.Asset,
@@ -85,6 +85,7 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 		}
 		tx.Coins = common.Coins{common.NewCoin(common.RuneAsset(), amt)}
 		tx.Gas = nil
+		swapEvt.OutTxs = common.NewTx(common.BlankTxID, tx.FromAddress, tx.ToAddress, tx.Coins, tx.Gas, tx.Memo)
 		swapEvents = append(swapEvents, swapEvt)
 	}
 	assetAmount, swapEvt, swapErr := s.swapOne(ctx, mgr, tx, target, destination, swapTarget, transactionFee, synthVirtualDepthMult)
@@ -120,6 +121,12 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 		}
 		if err := mgr.EventMgr().EmitEvent(ctx, evt); err != nil {
 			ctx.Logger().Error("fail to emit swap event", "error", err)
+		}
+		if !evt.OutTxs.IsEmpty() {
+			outboundEvt := NewEventOutbound(evt.InTx.ID, evt.OutTxs)
+			if err := mgr.EventMgr().EmitEvent(ctx, outboundEvt); err != nil {
+				ctx.Logger().Error("fail to emit an outbound event for double swap", "error", err)
+			}
 		}
 		if !evt.Pool.IsDerivedAsset() {
 			if err := keeper.AddToLiquidityFees(ctx, evt.Pool, evt.LiquidityFeeInRune); err != nil {
@@ -172,7 +179,7 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 	return assetAmount, swapEvents, nil
 }
 
-func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
+func (s *SwapperV121) swapOne(ctx cosmos.Context,
 	mgr Manager, tx common.Tx,
 	target common.Asset,
 	destination common.Address,
@@ -352,7 +359,7 @@ func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
 
 // calculate the number of assets sent to the address (includes liquidity fee)
 // nolint
-func (s *SwapperVCUR) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
+func (s *SwapperV121) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
 	// ( x * X * Y ) / ( x + X )^2
 	numerator := x.Mul(X).Mul(Y)
 	denominator := x.Add(X).Mul(x.Add(X))
@@ -364,7 +371,7 @@ func (s *SwapperVCUR) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
 
 // CalculateLiquidityFee the fee of the swap
 // nolint
-func (s *SwapperVCUR) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
+func (s *SwapperV121) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
 	// ( x^2 *  Y ) / ( x + X )^2
 	numerator := x.Mul(x).Mul(Y)
 	denominator := x.Add(X).Mul(x.Add(X))
@@ -376,7 +383,7 @@ func (s *SwapperVCUR) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
 
 // CalcSwapSlip - calculate the swap slip, expressed in basis points (10000)
 // nolint
-func (s *SwapperVCUR) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
+func (s *SwapperV121) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
 	// Cast to DECs
 	xD := cosmos.NewDecFromBigInt(xi.BigInt())
 	XD := cosmos.NewDecFromBigInt(Xi.BigInt())
