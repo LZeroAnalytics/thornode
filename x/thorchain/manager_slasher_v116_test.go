@@ -13,15 +13,15 @@ import (
 	"gitlab.com/thorchain/thornode/constants"
 )
 
-type SlashingVCURSuite struct{}
+type SlashingV116Suite struct{}
 
-var _ = Suite(&SlashingVCURSuite{})
+var _ = Suite(&SlashingV116Suite{})
 
-func (s *SlashingVCURSuite) SetUpSuite(_ *C) {
+func (s *SlashingV116Suite) SetUpSuite(_ *C) {
 	SetupConfigForTest()
 }
 
-func (s *SlashingVCURSuite) TestObservingSlashing(c *C) {
+func (s *SlashingV116Suite) TestObservingSlashing(c *C) {
 	var err error
 	ctx, k := setupKeeperForTest(c)
 	naActiveAfterTx := GetRandomValidatorNode(NodeActive)
@@ -62,7 +62,7 @@ func (s *SlashingVCURSuite) TestObservingSlashing(c *C) {
 	ver := GetCurrentVersion()
 	constAccessor := constants.GetConstantValues(ver)
 
-	slasher := newSlasherVCUR(k, NewDummyEventMgr())
+	slasher := newSlasherV116(k, NewDummyEventMgr())
 	// should slash na2 only
 	lackOfObservationPenalty := constAccessor.GetInt64Value(constants.LackOfObservationPenalty)
 	err = slasher.LackObserving(ctx, constAccessor)
@@ -98,7 +98,7 @@ func (s *SlashingVCURSuite) TestObservingSlashing(c *C) {
 	c.Assert(slashPoint, Equals, lackOfObservationPenalty)
 }
 
-func (s *SlashingVCURSuite) TestLackObservingErrors(c *C) {
+func (s *SlashingV116Suite) TestLackObservingErrors(c *C) {
 	ctx, _ := setupKeeperForTest(c)
 
 	nas := NodeAccounts{
@@ -112,12 +112,12 @@ func (s *SlashingVCURSuite) TestLackObservingErrors(c *C) {
 	}
 	ver := GetCurrentVersion()
 	constAccessor := constants.GetConstantValues(ver)
-	slasher := newSlasherVCUR(keeper, NewDummyEventMgr())
+	slasher := newSlasherV116(keeper, NewDummyEventMgr())
 	err := slasher.LackObserving(ctx, constAccessor)
 	c.Assert(err, IsNil)
 }
 
-func (s *SlashingVCURSuite) TestNodeSignSlashErrors(c *C) {
+func (s *SlashingV116Suite) TestNodeSignSlashErrors(c *C) {
 	testCases := []struct {
 		name        string
 		condition   func(keeper *TestSlashingLackKeeper)
@@ -210,7 +210,7 @@ func (s *SlashingVCURSuite) TestNodeSignSlashErrors(c *C) {
 		}
 		signingTransactionPeriod := constAccessor.GetInt64Value(constants.SigningTransactionPeriod)
 		ctx = ctx.WithBlockHeight(3 + signingTransactionPeriod)
-		slasher := newSlasherVCUR(keeper, NewDummyEventMgr())
+		slasher := newSlasherV116(keeper, NewDummyEventMgr())
 		item.condition(keeper)
 		if item.shouldError {
 			c.Assert(slasher.LackSigning(ctx, NewDummyMgr()), NotNil)
@@ -220,7 +220,7 @@ func (s *SlashingVCURSuite) TestNodeSignSlashErrors(c *C) {
 	}
 }
 
-func (s *SlashingVCURSuite) TestNotSigningSlash(c *C) {
+func (s *SlashingV116Suite) TestNotSigningSlash(c *C) {
 	ctx, _ := setupKeeperForTest(c)
 	ctx = ctx.WithBlockHeight(201) // set blockheight
 	txOutStore := NewTxStoreDummy()
@@ -269,7 +269,7 @@ func (s *SlashingVCURSuite) TestNotSigningSlash(c *C) {
 	ctx = ctx.WithBlockHeight(3 + signingTransactionPeriod)
 	mgr := NewDummyMgr()
 	mgr.txOutStore = txOutStore
-	slasher := newSlasherVCUR(keeper, NewDummyEventMgr())
+	slasher := newSlasherV116(keeper, NewDummyEventMgr())
 	c.Assert(slasher.LackSigning(ctx, mgr), IsNil)
 
 	c.Check(keeper.slashPts[na.NodeAddress.String()], Equals, int64(600), Commentf("%+v\n", na))
@@ -285,7 +285,7 @@ func (s *SlashingVCURSuite) TestNotSigningSlash(c *C) {
 	c.Assert(keeper.txOut.TxArray[0].OutHash.IsEmpty(), Equals, false)
 }
 
-func (s *SlashingVCURSuite) TestNewSlasher(c *C) {
+func (s *SlashingV116Suite) TestNewSlasher(c *C) {
 	nas := NodeAccounts{
 		GetRandomValidatorNode(NodeActive),
 		GetRandomValidatorNode(NodeActive),
@@ -295,11 +295,11 @@ func (s *SlashingVCURSuite) TestNewSlasher(c *C) {
 		addrs:    []cosmos.AccAddress{nas[0].NodeAddress},
 		slashPts: make(map[string]int64),
 	}
-	slasher := newSlasherVCUR(keeper, NewDummyEventMgr())
+	slasher := newSlasherV116(keeper, NewDummyEventMgr())
 	c.Assert(slasher, NotNil)
 }
 
-func (s *SlashingVCURSuite) TestDoubleSign(c *C) {
+func (s *SlashingV116Suite) TestDoubleSign(c *C) {
 	ctx, _ := setupKeeperForTest(c)
 	constAccessor := constants.GetConstantValues(GetCurrentVersion())
 
@@ -311,23 +311,18 @@ func (s *SlashingVCURSuite) TestDoubleSign(c *C) {
 		network: NewNetwork(),
 		modules: make(map[string]int64),
 	}
-	slasher := newSlasherVCUR(keeper, NewDummyEventMgr())
+	slasher := newSlasherV116(keeper, NewDummyEventMgr())
 
 	pk, err := cosmos.GetPubKeyFromBech32(cosmos.Bech32PubKeyTypeConsPub, na.ValidatorConsPubKey)
 	c.Assert(err, IsNil)
-
-	var pair nodeAddressValidatorAddressPairVCUR
-	pair.nodeAddress = na.NodeAddress
-	pair.validatorAddress = pk.Address()
-
-	err = slasher.HandleDoubleSign(ctx, pk.Address(), 0, constAccessor, []nodeAddressValidatorAddressPairVCUR{pair})
+	err = slasher.HandleDoubleSign(ctx, pk.Address(), 0, constAccessor)
 	c.Assert(err, IsNil)
 
 	c.Check(keeper.na.Bond.Equal(cosmos.NewUint(9995000000)), Equals, true, Commentf("%d", keeper.na.Bond.Uint64()))
 	c.Check(keeper.modules[ReserveName], Equals, int64(5000000))
 }
 
-func (s *SlashingVCURSuite) TestIncreaseDecreaseSlashPoints(c *C) {
+func (s *SlashingV116Suite) TestIncreaseDecreaseSlashPoints(c *C) {
 	ctx, _ := setupKeeperForTest(c)
 
 	na := GetRandomValidatorNode(NodeActive)
@@ -338,16 +333,16 @@ func (s *SlashingVCURSuite) TestIncreaseDecreaseSlashPoints(c *C) {
 		network:     NewNetwork(),
 		slashPoints: make(map[string]int64),
 	}
-	slasher := newSlasherVCUR(keeper, NewDummyEventMgr())
+	slasher := newSlasherV116(keeper, NewDummyEventMgr())
 	addr := GetRandomBech32Addr()
 	slasher.IncSlashPoints(ctx, 1, addr)
 	slasher.DecSlashPoints(ctx, 1, addr)
 	c.Assert(keeper.slashPoints[addr.String()], Equals, int64(0))
 }
 
-func (s *SlashingVCURSuite) TestSlashVault(c *C) {
+func (s *SlashingV116Suite) TestSlashVault(c *C) {
 	ctx, mgr := setupManagerForTest(c)
-	slasher := newSlasherVCUR(mgr.Keeper(), mgr.EventMgr())
+	slasher := newSlasherV116(mgr.Keeper(), mgr.EventMgr())
 	// when coins are empty , it should return nil
 	c.Assert(slasher.SlashVault(ctx, GetRandomPubKey(), common.NewCoins(), mgr), IsNil)
 
@@ -452,9 +447,9 @@ func (s *SlashingVCURSuite) TestSlashVault(c *C) {
 	c.Assert(val, Equals, int64(18), Commentf("%d", val))
 }
 
-func (s *SlashingVCURSuite) TestSlashAndUpdateNodeAccount(c *C) {
+func (s *SlashingV116Suite) TestSlashAndUpdateNodeAccount(c *C) {
 	ctx, mgr := setupManagerForTest(c)
-	slasher := newSlasherVCUR(mgr.Keeper(), mgr.EventMgr())
+	slasher := newSlasherV116(mgr.Keeper(), mgr.EventMgr())
 
 	// create a node + ygg
 	node := GetRandomValidatorNode(NodeActive)
@@ -493,9 +488,9 @@ func (s *SlashingVCURSuite) TestSlashAndUpdateNodeAccount(c *C) {
 	c.Assert(updatedNode.ForcedToLeave, Equals, false)
 }
 
-func (s *SlashingVCURSuite) TestUpdatePoolFromSlash(c *C) {
+func (s *SlashingV116Suite) TestUpdatePoolFromSlash(c *C) {
 	ctx, mgr := setupManagerForTest(c)
-	slasher := newSlasherVCUR(mgr.Keeper(), mgr.EventMgr())
+	slasher := newSlasherV116(mgr.Keeper(), mgr.EventMgr())
 
 	pool := NewPool()
 	pool.Asset = common.BTCAsset
@@ -515,9 +510,9 @@ func (s *SlashingVCURSuite) TestUpdatePoolFromSlash(c *C) {
 	c.Assert(pool.BalanceRune.Uint64(), Equals, uint64(1500*common.One))
 }
 
-func (s *SlashingVCURSuite) TestNetworkShouldNotSlashMorethanVaultAmount(c *C) {
+func (s *SlashingV116Suite) TestNetworkShouldNotSlashMorethanVaultAmount(c *C) {
 	ctx, mgr := setupManagerForTest(c)
-	slasher := newSlasherVCUR(mgr.Keeper(), mgr.EventMgr())
+	slasher := newSlasherV116(mgr.Keeper(), mgr.EventMgr())
 
 	// create a node
 	node := GetRandomValidatorNode(NodeActive)
@@ -645,7 +640,7 @@ func (s *SlashingVCURSuite) TestNetworkShouldNotSlashMorethanVaultAmount(c *C) {
 	c.Assert(updatedPool.BalanceAsset.Uint64(), Equals, cosmos.NewUint(2000*common.One).Uint64())
 }
 
-func (s *SlashingVCURSuite) TestNeedsNewVault(c *C) {
+func (s *SlashingV116Suite) TestNeedsNewVault(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 
 	inhash := GetRandomTxHash()
@@ -664,7 +659,7 @@ func (s *SlashingVCURSuite) TestNeedsNewVault(c *C) {
 	mgr.Keeper().SetObservedTxOutVoter(ctx, voter)
 
 	mgr.Keeper().SetObservedLink(ctx, inhash, outhash)
-	slasher := newSlasherVCUR(mgr.Keeper(), mgr.EventMgr())
+	slasher := newSlasherV116(mgr.Keeper(), mgr.EventMgr())
 
 	c.Check(slasher.needsNewVault(ctx, mgr, 10, 300, 1, inhash, pk), Equals, false)
 	ctx = ctx.WithBlockHeight(600)
