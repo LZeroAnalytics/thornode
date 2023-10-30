@@ -17,17 +17,17 @@ import (
 	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
 )
 
-// TxOutStorageVCUR is going to manage all the outgoing tx
-type TxOutStorageVCUR struct {
+// TxOutStorageV122 is going to manage all the outgoing tx
+type TxOutStorageV122 struct {
 	keeper        keeper.Keeper
 	constAccessor constants.ConstantValues
 	eventMgr      EventManager
 	gasManager    GasManager
 }
 
-// newTxOutStorageVCUR will create a new instance of TxOutStore.
-func newTxOutStorageVCUR(keeper keeper.Keeper, constAccessor constants.ConstantValues, eventMgr EventManager, gasManager GasManager) *TxOutStorageVCUR {
-	return &TxOutStorageVCUR{
+// newTxOutStorageV122 will create a new instance of TxOutStore.
+func newTxOutStorageV122(keeper keeper.Keeper, constAccessor constants.ConstantValues, eventMgr EventManager, gasManager GasManager) *TxOutStorageV122 {
+	return &TxOutStorageV122{
 		keeper:        keeper,
 		eventMgr:      eventMgr,
 		constAccessor: constAccessor,
@@ -35,7 +35,7 @@ func newTxOutStorageVCUR(keeper keeper.Keeper, constAccessor constants.ConstantV
 	}
 }
 
-func (tos *TxOutStorageVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
+func (tos *TxOutStorageV122) EndBlock(ctx cosmos.Context, mgr Manager) error {
 	// update the max gas for all outbounds in this block. This can be useful
 	// if an outbound transaction was scheduled into the future, and the gas
 	// for that blockchain changes in that time span. This avoids the need to
@@ -96,12 +96,12 @@ func (tos *TxOutStorageVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 }
 
 // GetBlockOut read the TxOut from kv store
-func (tos *TxOutStorageVCUR) GetBlockOut(ctx cosmos.Context) (*TxOut, error) {
+func (tos *TxOutStorageV122) GetBlockOut(ctx cosmos.Context) (*TxOut, error) {
 	return tos.keeper.GetTxOut(ctx, ctx.BlockHeight())
 }
 
 // GetOutboundItems read all the outbound item from kv store
-func (tos *TxOutStorageVCUR) GetOutboundItems(ctx cosmos.Context) ([]TxOutItem, error) {
+func (tos *TxOutStorageV122) GetOutboundItems(ctx cosmos.Context) ([]TxOutItem, error) {
 	block, err := tos.keeper.GetTxOut(ctx, ctx.BlockHeight())
 	if block == nil {
 		return nil, nil
@@ -110,7 +110,7 @@ func (tos *TxOutStorageVCUR) GetOutboundItems(ctx cosmos.Context) ([]TxOutItem, 
 }
 
 // GetOutboundItemByToAddress read all the outbound items filter by the given to address
-func (tos *TxOutStorageVCUR) GetOutboundItemByToAddress(ctx cosmos.Context, to common.Address) []TxOutItem {
+func (tos *TxOutStorageV122) GetOutboundItemByToAddress(ctx cosmos.Context, to common.Address) []TxOutItem {
 	filterItems := make([]TxOutItem, 0)
 	items, _ := tos.GetOutboundItems(ctx)
 	for _, item := range items {
@@ -122,14 +122,14 @@ func (tos *TxOutStorageVCUR) GetOutboundItemByToAddress(ctx cosmos.Context, to c
 }
 
 // ClearOutboundItems remove all the tx out items , mostly used for test
-func (tos *TxOutStorageVCUR) ClearOutboundItems(ctx cosmos.Context) {
+func (tos *TxOutStorageV122) ClearOutboundItems(ctx cosmos.Context) {
 	_ = tos.keeper.ClearTxOut(ctx, ctx.BlockHeight())
 }
 
 // When TryAddTxOutItem returns an error, there should be no state changes from it,
 // including funds movements or fee events from prepareTxOutItem.
 // So, use CacheContext to only commit state changes when cachedTryAddTxOutItem doesn't return an error.
-func (tos *TxOutStorageVCUR) TryAddTxOutItem(ctx cosmos.Context, mgr Manager, toi TxOutItem, minOut cosmos.Uint) (bool, error) {
+func (tos *TxOutStorageV122) TryAddTxOutItem(ctx cosmos.Context, mgr Manager, toi TxOutItem, minOut cosmos.Uint) (bool, error) {
 	cacheCtx, commit := ctx.CacheContext()
 	success, err := tos.cachedTryAddTxOutItem(cacheCtx, mgr, toi, minOut)
 	if err == nil {
@@ -142,7 +142,7 @@ func (tos *TxOutStorageVCUR) TryAddTxOutItem(ctx cosmos.Context, mgr Manager, to
 // (cached)TryAddTxOutItem add an outbound tx to block
 // return bool indicate whether the transaction had been added successful or not
 // return error indicate error
-func (tos *TxOutStorageVCUR) cachedTryAddTxOutItem(ctx cosmos.Context, mgr Manager, toi TxOutItem, minOut cosmos.Uint) (bool, error) {
+func (tos *TxOutStorageV122) cachedTryAddTxOutItem(ctx cosmos.Context, mgr Manager, toi TxOutItem, minOut cosmos.Uint) (bool, error) {
 	outputs, totalOutboundFeeRune, err := tos.prepareTxOutItem(ctx, toi)
 	if err != nil {
 		return false, fmt.Errorf("fail to prepare outbound tx: %w", err)
@@ -221,7 +221,7 @@ func (tos *TxOutStorageVCUR) cachedTryAddTxOutItem(ctx cosmos.Context, mgr Manag
 
 // UnSafeAddTxOutItem - blindly adds a tx out, skipping vault selection, transaction
 // fee deduction, etc
-func (tos *TxOutStorageVCUR) UnSafeAddTxOutItem(ctx cosmos.Context, mgr Manager, toi TxOutItem) error {
+func (tos *TxOutStorageV122) UnSafeAddTxOutItem(ctx cosmos.Context, mgr Manager, toi TxOutItem) error {
 	// BCH chain will convert legacy address to new format automatically , thus when observe it back can't be associated with the original inbound
 	// so here convert the legacy address to new format
 	if toi.Chain.Equals(common.BCHChain) {
@@ -237,7 +237,7 @@ func (tos *TxOutStorageVCUR) UnSafeAddTxOutItem(ctx cosmos.Context, mgr Manager,
 	return tos.addToBlockOut(ctx, mgr, toi, ctx.BlockHeight())
 }
 
-func (tos *TxOutStorageVCUR) discoverOutbounds(ctx cosmos.Context, transactionFeeAsset cosmos.Uint, maxGasAsset common.Coin, toi TxOutItem, vaults Vaults) ([]TxOutItem, cosmos.Uint) {
+func (tos *TxOutStorageV122) discoverOutbounds(ctx cosmos.Context, transactionFeeAsset cosmos.Uint, maxGasAsset common.Coin, toi TxOutItem, vaults Vaults) ([]TxOutItem, cosmos.Uint) {
 	var outputs []TxOutItem
 
 	// When there is more than one vault, sort the vaults by
@@ -332,7 +332,7 @@ func (tos *TxOutStorageVCUR) discoverOutbounds(ctx cosmos.Context, transactionFe
 // 2. choose an appropriate vault(s) to send from (ygg first, active asgard, then retiring asgard)
 // 3. deduct transaction fee, keep in mind, only take transaction fee when active nodes are  more then minimumBFT
 // return list of outbound transactions
-func (tos *TxOutStorageVCUR) prepareTxOutItem(ctx cosmos.Context, toi TxOutItem) ([]TxOutItem, types.Uint, error) {
+func (tos *TxOutStorageV122) prepareTxOutItem(ctx cosmos.Context, toi TxOutItem) ([]TxOutItem, types.Uint, error) {
 	var outputs []TxOutItem
 	var remaining cosmos.Uint
 
@@ -412,7 +412,7 @@ func (tos *TxOutStorageVCUR) prepareTxOutItem(ctx cosmos.Context, toi TxOutItem)
 			if err != nil {
 				ctx.Logger().Error("fail to get all active node accounts", "error", err)
 			}
-			yggs := make(Vaults, 0)
+			ygg := make(Vaults, 0)
 			if len(activeNodeAccounts) > 0 {
 				voter, err := tos.keeper.GetObservedTxInVoter(ctx, toi.InHash)
 				if err != nil {
@@ -422,49 +422,45 @@ func (tos *TxOutStorageVCUR) prepareTxOutItem(ctx cosmos.Context, toi TxOutItem)
 
 				// collect yggdrasil pools is going to get a list of yggdrasil
 				// vault that THORChain can used to send out fund
-				yggs, err = tos.collectYggdrasilPools(ctx, tx, toi.Chain.GetGasAsset())
+				ygg, err = tos.collectYggdrasilPools(ctx, tx, toi.Chain.GetGasAsset())
 				if err != nil {
 					return nil, cosmos.ZeroUint(), fmt.Errorf("fail to collect yggdrasil pool: %w", err)
 				}
-
-				// All else being equal, prefer lower-security vaults for outbounds.
-				yggs = tos.keeper.SortBySecurity(ctx, yggs, signingTransactionPeriod)
-
-				for i := range yggs {
-					// having sorted by security, deduct the value of any assigned pending outbounds
-					yggs[i] = tos.deductVaultPendingOutbounds(yggs[i], pendingOutbounds)
+				for i := range ygg {
+					// deduct the value of any assigned pending outbounds
+					ygg[i] = tos.deductVaultPendingOutbounds(ygg[i], pendingOutbounds)
 				}
 			}
+			// All else being equal, prefer lower-security vaults for outbounds.
+			yggs := tos.keeper.SortBySecurity(ctx, ygg, signingTransactionPeriod)
 			// //////////////////////////////////////////////////////////////
 
 			// ///////////// COLLECT ACTIVE ASGARD VAULTS ///////////////////
-			activeAsgards, err := tos.keeper.GetAsgardVaultsByStatus(ctx, ActiveVault)
+			active, err := tos.keeper.GetAsgardVaultsByStatus(ctx, ActiveVault)
 			if err != nil {
 				ctx.Logger().Error("fail to get active vaults", "error", err)
 			}
 
-			// All else being equal, prefer lower-security vaults for outbounds.
-			activeAsgards = tos.keeper.SortBySecurity(ctx, activeAsgards, signingTransactionPeriod)
-
-			for i := range activeAsgards {
-				// having sorted by security, deduct the value of any assigned pending outbounds
-				activeAsgards[i] = tos.deductVaultPendingOutbounds(activeAsgards[i], pendingOutbounds)
+			for i := range active {
+				// deduct the value of any assigned pending outbounds
+				active[i] = tos.deductVaultPendingOutbounds(active[i], pendingOutbounds)
 			}
+			// All else being equal, prefer lower-security vaults for outbounds.
+			activeAsgards := tos.keeper.SortBySecurity(ctx, active, signingTransactionPeriod)
 			// //////////////////////////////////////////////////////////////
 
 			// ///////////// COLLECT RETIRING ASGARD VAULTS /////////////////
-			retiringAsgards, err := tos.keeper.GetAsgardVaultsByStatus(ctx, RetiringVault)
+			retiring, err := tos.keeper.GetAsgardVaultsByStatus(ctx, RetiringVault)
 			if err != nil {
 				ctx.Logger().Error("fail to get retiring vaults", "error", err)
 			}
-
-			// All else being equal, prefer lower-security vaults for outbounds.
-			retiringAsgards = tos.keeper.SortBySecurity(ctx, retiringAsgards, signingTransactionPeriod)
-
-			for i := range retiringAsgards {
-				// having sorted by security, deduct the value of any assigned pending outbounds
-				retiringAsgards[i] = tos.deductVaultPendingOutbounds(retiringAsgards[i], pendingOutbounds)
+			for i := range retiring {
+				// deduct the value of any assigned pending outbounds
+				retiring[i] = tos.deductVaultPendingOutbounds(retiring[i], pendingOutbounds)
 			}
+			// All else being equal, prefer lower-security vaults for outbounds.
+			retiringAsgards := tos.keeper.SortBySecurity(ctx, retiring, signingTransactionPeriod)
+
 			// //////////////////////////////////////////////////////////////
 
 			// iterate over discovered vaults and find vaults to send funds from
@@ -683,7 +679,7 @@ func (tos *TxOutStorageVCUR) prepareTxOutItem(ctx cosmos.Context, toi TxOutItem)
 	return finalOutput, finalRuneFee, nil
 }
 
-func (tos *TxOutStorageVCUR) addToBlockOut(ctx cosmos.Context, mgr Manager, item TxOutItem, outboundHeight int64) error {
+func (tos *TxOutStorageV122) addToBlockOut(ctx cosmos.Context, mgr Manager, item TxOutItem, outboundHeight int64) error {
 	// if we're sending native assets, transfer them now and return
 	if item.Chain.IsTHORChain() {
 		return tos.nativeTxOut(ctx, mgr, item)
@@ -708,7 +704,7 @@ func (tos *TxOutStorageVCUR) addToBlockOut(ctx cosmos.Context, mgr Manager, item
 	return tos.keeper.AppendTxOut(ctx, outboundHeight, item)
 }
 
-func (tos *TxOutStorageVCUR) CalcTxOutHeight(ctx cosmos.Context, version semver.Version, toi TxOutItem) (int64, error) {
+func (tos *TxOutStorageV122) CalcTxOutHeight(ctx cosmos.Context, version semver.Version, toi TxOutItem) (int64, error) {
 	// non-outbound transactions are skipped. This is so this code does not
 	// affect internal transactions (ie consolidation and migrate txs)
 	memo, _ := ParseMemo(version, toi.Memo) // ignore err
@@ -804,7 +800,7 @@ func (tos *TxOutStorageVCUR) CalcTxOutHeight(ctx cosmos.Context, version semver.
 	return targetBlock, nil
 }
 
-func (tos *TxOutStorageVCUR) nativeTxOut(ctx cosmos.Context, mgr Manager, toi TxOutItem) error {
+func (tos *TxOutStorageV122) nativeTxOut(ctx cosmos.Context, mgr Manager, toi TxOutItem) error {
 	addr, err := cosmos.AccAddressFromBech32(toi.ToAddress.String())
 	if err != nil {
 		return err
@@ -900,7 +896,7 @@ func (tos *TxOutStorageVCUR) nativeTxOut(ctx cosmos.Context, mgr Manager, toi Tx
 }
 
 // collectYggdrasilPools is to get all the yggdrasil vaults , that THORChain can used to send out fund
-func (tos *TxOutStorageVCUR) collectYggdrasilPools(ctx cosmos.Context, tx ObservedTx, gasAsset common.Asset) (Vaults, error) {
+func (tos *TxOutStorageV122) collectYggdrasilPools(ctx cosmos.Context, tx ObservedTx, gasAsset common.Asset) (Vaults, error) {
 	// collect yggdrasil pools
 	var vaults Vaults
 	iterator := tos.keeper.GetVaultIterator(ctx)
@@ -952,11 +948,11 @@ func (tos *TxOutStorageVCUR) collectYggdrasilPools(ctx cosmos.Context, tx Observ
 	return vaults, nil
 }
 
-// getPendingOutbounds deducts txouts in the outbound and scheduled outbound queues to leave only 'available' balances,
-// as the amounts of both types of txout items are yet to be deducted from the vault balances
-func (tos *TxOutStorageVCUR) getPendingOutbounds(ctx cosmos.Context, asset common.Asset) []TxOutItem {
-	signingPeriod := tos.constAccessor.GetInt64Value(constants.SigningTransactionPeriod)
-	startHeight := ctx.BlockHeight() - signingPeriod
+// getPendingOutbounds only deduct the delayed outbound , it doesn't need to consider already scheduled but not sent outbound
+func (tos *TxOutStorageV122) getPendingOutbounds(ctx cosmos.Context, asset common.Asset) []TxOutItem {
+	// There is no need to go back SigningTransactionPeriod blocks to check pending outbound , as the logic is already in place
+	// in keeper_vault.go SortBySecurity
+	startHeight := ctx.BlockHeight()
 	if startHeight < 1 {
 		startHeight = 1
 	}
@@ -988,7 +984,7 @@ func (tos *TxOutStorageVCUR) getPendingOutbounds(ctx cosmos.Context, asset commo
 	return outbounds
 }
 
-func (tos *TxOutStorageVCUR) deductVaultPendingOutbounds(vault Vault, pendingOutbounds []TxOutItem) Vault {
+func (tos *TxOutStorageV122) deductVaultPendingOutbounds(vault Vault, pendingOutbounds []TxOutItem) Vault {
 	for _, txOutItem := range pendingOutbounds {
 		if !txOutItem.VaultPubKey.Equals(vault.PubKey) {
 			continue
@@ -1002,11 +998,11 @@ func (tos *TxOutStorageVCUR) deductVaultPendingOutbounds(vault Vault, pendingOut
 		if !txOutItem.MaxGas.IsEmpty() {
 			gasCoin = txOutItem.MaxGas.ToCoins().GetCoin(txOutItem.Chain.GetGasAsset())
 		}
-		for i := range vault.Coins {
-			if vault.Coins[i].Asset.Equals(txOutItem.Coin.Asset) {
+		for i, yggCoin := range vault.Coins {
+			if yggCoin.Asset.Equals(txOutItem.Coin.Asset) {
 				vault.Coins[i].Amount = common.SafeSub(vault.Coins[i].Amount, txOutItem.Coin.Amount)
 			}
-			if vault.Coins[i].Asset.Equals(gasCoin.Asset) {
+			if yggCoin.Asset.Equals(gasCoin.Asset) {
 				vault.Coins[i].Amount = common.SafeSub(vault.Coins[i].Amount, gasCoin.Amount)
 			}
 		}
