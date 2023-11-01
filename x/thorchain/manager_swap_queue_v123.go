@@ -10,22 +10,22 @@ import (
 	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
 )
 
-// SwapQueueVCUR is going to manage the swaps queue
-type SwapQueueVCUR struct {
+// SwapQueueV123 is going to manage the swaps queue
+type SwapQueueV123 struct {
 	k       keeper.Keeper
 	handler func(mgr Manager) cosmos.Handler
 }
 
-// newSwapQueueVCUR create a new vault manager
-func newSwapQueueVCUR(k keeper.Keeper) *SwapQueueVCUR {
-	return &SwapQueueVCUR{
+// newSwapQueueV123 create a new vault manager
+func newSwapQueueV123(k keeper.Keeper) *SwapQueueV123 {
+	return &SwapQueueV123{
 		k:       k,
 		handler: NewInternalHandler,
 	}
 }
 
 // FetchQueue - grabs all swap queue items from the kvstore and returns them
-func (vm *SwapQueueVCUR) FetchQueue(ctx cosmos.Context) (swapItems, error) { // nolint
+func (vm *SwapQueueV123) FetchQueue(ctx cosmos.Context) (swapItems, error) { // nolint
 	items := make(swapItems, 0)
 	iterator := vm.k.GetSwapQueueIterator(ctx)
 	defer iterator.Close()
@@ -86,7 +86,7 @@ func (vm *SwapQueueVCUR) FetchQueue(ctx cosmos.Context) (swapItems, error) { // 
 }
 
 // EndBlock trigger the real swap to be processed
-func (vm *SwapQueueVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
+func (vm *SwapQueueV123) EndBlock(ctx cosmos.Context, mgr Manager) error {
 	handler := vm.handler(mgr)
 
 	minSwapsPerBlock, err := vm.k.GetMimir(ctx, constants.MinSwapsPerBlock.String())
@@ -240,6 +240,9 @@ func (vm *SwapQueueVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 				}
 
 				for _, item := range tois {
+					if item.ToAddress.Equals(common.NoopAddress) {
+						continue
+					}
 					ok, err := mgr.TxOutStore().TryAddTxOutItem(ctx, mgr, item, cosmos.ZeroUint())
 					if err != nil {
 						return ErrInternal(err, "fail to add outbound tx")
@@ -261,7 +264,7 @@ func (vm *SwapQueueVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 }
 
 // getTodoNum - determine how many swaps to do.
-func (vm *SwapQueueVCUR) getTodoNum(queueLen, minSwapsPerBlock, maxSwapsPerBlock int64) int64 {
+func (vm *SwapQueueV123) getTodoNum(queueLen, minSwapsPerBlock, maxSwapsPerBlock int64) int64 {
 	// Do half the length of the queue. Unless...
 	//	1. The queue length is greater than maxSwapsPerBlock
 	//  2. The queue legnth is less than minSwapsPerBlock
@@ -277,7 +280,7 @@ func (vm *SwapQueueVCUR) getTodoNum(queueLen, minSwapsPerBlock, maxSwapsPerBlock
 
 // scoreMsgs - this takes a list of MsgSwap, and converts them to a scored
 // swapItem list
-func (vm *SwapQueueVCUR) scoreMsgs(ctx cosmos.Context, items swapItems, synthVirtualDepthMult int64) (swapItems, error) {
+func (vm *SwapQueueV123) scoreMsgs(ctx cosmos.Context, items swapItems, synthVirtualDepthMult int64) (swapItems, error) {
 	pools := make(map[common.Asset]Pool)
 
 	for i, item := range items {
@@ -341,7 +344,7 @@ func (vm *SwapQueueVCUR) scoreMsgs(ctx cosmos.Context, items swapItems, synthVir
 }
 
 // getLiquidityFeeAndSlip calculate liquidity fee and slip, fee is in RUNE
-func (vm *SwapQueueVCUR) getLiquidityFeeAndSlip(ctx cosmos.Context, pool Pool, sourceCoin common.Coin, item *swapItem, virtualDepthMult int64) {
+func (vm *SwapQueueV123) getLiquidityFeeAndSlip(ctx cosmos.Context, pool Pool, sourceCoin common.Coin, item *swapItem, virtualDepthMult int64) {
 	// Get our X, x, Y values
 	var X, x, Y cosmos.Uint
 	x = sourceCoin.Amount
