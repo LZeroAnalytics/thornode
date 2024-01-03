@@ -9,14 +9,6 @@
   "keywords": ["1inch", "default", "list"],
   "tokens": [
     {
-      "address": "0xa6C0c097741D55ECd9a3A7DeF3A8253fD022ceB9",
-      "chainId": 1,
-      "name": "AVA",
-      "symbol": "AVA",
-      "decimals": 18,
-      "logoURI": "https://etherscan.io/token/images/avafoundation_32.png"
-    },
-    {
       "address": "0x9506d37f70eB4C3d79C398d326C871aBBf10521d",
       "chainId": 1,
       "name": "Media Licensing Token",
