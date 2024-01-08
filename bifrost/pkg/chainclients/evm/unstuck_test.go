@@ -1,4 +1,4 @@
-package ethereum
+package evm
 
 import (
 	"encoding/hex"
@@ -96,28 +96,27 @@ func (s *UnstuckTestSuite) SetUpTest(c *C) {
 			var body []byte
 			body, err = io.ReadAll(req.Body)
 			c.Assert(err, IsNil)
+
 			type RPCRequest struct {
 				JSONRPC string          `json:"jsonrpc"`
 				ID      interface{}     `json:"id"`
 				Method  string          `json:"method"`
 				Params  json.RawMessage `json:"params"`
 			}
-			var rpcRequest RPCRequest
-			err = json.Unmarshal(body, &rpcRequest)
-			c.Assert(err, IsNil)
 
-			switch rpcRequest.Method {
-			case "eth_chainId":
-				_, err = rw.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x539"}`))
+			// the only thing in this test that uses batching is fetch transaction receipts
+			if body[0] == '[' {
+				var rpcRequests []RPCRequest
+				err = json.Unmarshal(body, &rpcRequests)
 				c.Assert(err, IsNil)
-				return
-			case "eth_getTransactionReceipt":
-				// read txid from the request
+				c.Assert(len(rpcRequests), Equals, 1)
+				rpcRequest := rpcRequests[0]
+				c.Assert(rpcRequest.Method, Equals, "eth_getTransactionReceipt")
 				var params []string
 				err = json.Unmarshal(rpcRequest.Params, &params)
 				c.Assert(err, IsNil)
-
-				_, err = rw.Write([]byte(`{
+				c.Assert(params[0], Equals, lastBroadcastTx)
+				_, err = rw.Write([]byte(`[{
 						"jsonrpc": "2.0",
 						"id": 1,
 						"result": {
@@ -134,9 +133,20 @@ func (s *UnstuckTestSuite) SetUpTest(c *C) {
 							"transactionHash": "` + lastBroadcastTx + `",
 							"transactionIndex": "0x1"
 						}
-					}`))
+					}]`))
 				c.Assert(err, IsNil)
+				return
+			}
 
+			var rpcRequest RPCRequest
+			err = json.Unmarshal(body, &rpcRequest)
+			c.Assert(err, IsNil)
+
+			switch rpcRequest.Method {
+			case "eth_chainId":
+				_, err = rw.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x539"}`))
+				c.Assert(err, IsNil)
+				return
 			case "eth_getTransactionByHash":
 				var hashes []string
 				c.Assert(json.Unmarshal(rpcRequest.Params, &hashes), IsNil)
@@ -264,8 +274,10 @@ func (s *UnstuckTestSuite) TestUnstuckProcess(c *C) {
 	pubkeyMgr, err := pubkeymanager.NewPubKeyManager(s.bridge, s.m)
 	c.Assert(err, IsNil)
 	poolMgr := thorclient.NewPoolMgr(s.bridge)
-	e, err := NewClient(s.thorKeys, config.BifrostChainConfiguration{
-		RPCHost: "http://" + s.server.Listener.Addr().String(),
+	e, err := NewEVMClient(s.thorKeys, config.BifrostChainConfiguration{
+		ChainID:        common.AVAXChain,
+		RPCHost:        "http://" + s.server.Listener.Addr().String(),
+		SolvencyBlocks: 10,
 		BlockScanner: config.BifrostBlockScannerConfiguration{
 			StartBlockHeight:   1, // avoids querying thorchain for block height
 			HTTPRequestTimeout: time.Second * 10,
@@ -282,32 +294,34 @@ func (s *UnstuckTestSuite) TestUnstuckProcess(c *C) {
 	txID1 := types2.GetRandomTxHash().String()
 	txID2 := types2.GetRandomTxHash().String()
 	// add some thing here
-	c.Assert(e.ethScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
+	c.Assert(e.evmScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
 		Hash:        txID1,
 		Height:      1022,
 		VaultPubKey: pubkey,
 	}), IsNil)
-	c.Assert(e.ethScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
+	c.Assert(e.evmScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
 		Hash:        txID2,
 		Height:      1024,
 		VaultPubKey: pubkey,
 	}), IsNil)
 	// this should not do anything , because because all the tx has not been
 	e.unstuckAction()
-	items, err := e.ethScanner.blockMetaAccessor.GetSignedTxItems()
+	items, err := e.evmScanner.blockMetaAccessor.GetSignedTxItems()
 	c.Assert(err, IsNil)
 	c.Assert(items, HasLen, 2)
-	c.Assert(e.ethScanner.blockMetaAccessor.RemoveSignedTxItem(txID1), IsNil)
-	c.Assert(e.ethScanner.blockMetaAccessor.RemoveSignedTxItem(txID2), IsNil)
+	c.Assert(e.evmScanner.blockMetaAccessor.RemoveSignedTxItem(txID1), IsNil)
+	c.Assert(e.evmScanner.blockMetaAccessor.RemoveSignedTxItem(txID2), IsNil)
 
 	inHash := types2.GetRandomTxHash()
+	pKey := types2.GetRandomPubKey()
+	toAddr, _ := pKey.GetAddress(e.GetChain())
 	toi := ttypes.TxOutItem{
-		Chain:       common.ETHChain,
-		ToAddress:   types2.GetRandomETHAddress(),
+		Chain:       e.GetChain(),
+		ToAddress:   toAddr,
 		VaultPubKey: e.kw.GetPubKey(),
-		Coins:       common.Coins{common.NewCoin(common.ETHAsset, cosmos.NewUint(100000000))},
+		Coins:       common.Coins{common.NewCoin(e.GetChain().GetGasAsset(), cosmos.NewUint(100000000))},
 		Memo:        "OUT:" + inHash.String(),
-		MaxGas:      common.Gas(common.NewCoins(common.NewCoin(common.ETHAsset, cosmos.NewUint(100000000)))),
+		MaxGas:      common.Gas(common.NewCoins(common.NewCoin(e.GetChain().GetGasAsset(), cosmos.NewUint(100000000)))),
 		GasRate:     5,
 		InHash:      inHash,
 		Height:      800,
@@ -316,20 +330,20 @@ func (s *UnstuckTestSuite) TestUnstuckProcess(c *C) {
 	err = e.signerCacheManager.SetSigned(toi.CacheHash(), toi.CacheVault(e.GetChain()), stuckTxID)
 	c.Assert(err, IsNil)
 
-	c.Assert(e.ethScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
+	c.Assert(e.evmScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
 		Hash:        stuckTxID,
 		Height:      800,
 		VaultPubKey: pubkey,
 		TxOutItem:   &toi,
 	}), IsNil)
-	c.Assert(e.ethScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
+	c.Assert(e.evmScanner.blockMetaAccessor.AddSignedTxItem(types.SignedTxItem{
 		Hash:        "0x96395fbdb39e33293999dc1a0a3b87c8a9e51185e177760d1482c2155bb35b87",
 		Height:      800,
 		VaultPubKey: pubkey,
 	}), IsNil)
 	// this should try to check 0x88df016429689c079f3b2f6ad39fa052532c56795b733da78a91ebe6a713944b
 	e.unstuckAction()
-	items, err = e.ethScanner.blockMetaAccessor.GetSignedTxItems()
+	items, err = e.evmScanner.blockMetaAccessor.GetSignedTxItems()
 	c.Assert(err, IsNil)
 
 	// the stuck tx should be removed
@@ -339,7 +353,7 @@ func (s *UnstuckTestSuite) TestUnstuckProcess(c *C) {
 	c.Assert(e.signerCacheManager.HasSigned(toi.CacheHash()), Equals, true)
 
 	// removal should occur after the block containing the cancel transaction is scanned
-	txIn, err := e.ethScanner.FetchTxs(int64(1), int64(1))
+	txIn, err := e.evmScanner.FetchTxs(int64(1), int64(1))
 	c.Assert(err, IsNil)
 	c.Check(len(txIn.TxArray), Equals, 1)
 
