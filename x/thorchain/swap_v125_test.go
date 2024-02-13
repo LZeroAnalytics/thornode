@@ -10,17 +10,17 @@ import (
 	"gitlab.com/thorchain/thornode/common/cosmos"
 )
 
-type SwapVCURSuite struct{}
+type SwapV125Suite struct{}
 
-var _ = Suite(&SwapVCURSuite{})
+var _ = Suite(&SwapV125Suite{})
 
-func (s *SwapVCURSuite) SetUpSuite(c *C) {
+func (s *SwapV125Suite) SetUpSuite(c *C) {
 	err := os.Setenv("NET", "other")
 	c.Assert(err, IsNil)
 	SetupConfigForTest()
 }
 
-func (s *SwapVCURSuite) TestSwap(c *C) {
+func (s *SwapV125Suite) TestSwap(c *C) {
 	poolStorage := &TestSwapKeeper{}
 	inputs := []struct {
 		name          string
@@ -215,19 +215,6 @@ func (s *SwapVCURSuite) TestSwap(c *C) {
 			expectedErr:   nil,
 			events:        1,
 		},
-		{
-			name:          "swap-slip-min",
-			requestTxHash: "hash",
-			source:        common.RuneAsset(),
-			target:        common.BNBAsset,
-			amount:        cosmos.NewUint(2 * 1000_000),
-			requester:     GetRandomTHORAddress(),
-			destination:   GetRandomBNBAddress(),
-			returnAmount:  cosmos.NewUint(1979604),
-			tradeTarget:   cosmos.NewUint(1979604),
-			expectedErr:   nil,
-			events:        1,
-		},
 	}
 
 	for _, item := range inputs {
@@ -247,7 +234,7 @@ func (s *SwapVCURSuite) TestSwap(c *C) {
 		mgr.K = poolStorage
 		mgr.txOutStore = NewTxStoreDummy()
 
-		amount, evts, err := newSwapperVCUR().Swap(ctx, poolStorage, tx, item.target, item.destination, item.tradeTarget, "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
+		amount, evts, err := newSwapperV125().Swap(ctx, poolStorage, tx, item.target, item.destination, item.tradeTarget, "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
 		if item.expectedErr == nil {
 			c.Assert(err, IsNil)
 			c.Assert(evts, HasLen, item.events)
@@ -262,7 +249,7 @@ func (s *SwapVCURSuite) TestSwap(c *C) {
 	}
 }
 
-func (s *SwapVCURSuite) TestSynthSwap_RuneSynthRune(c *C) {
+func (s *SwapV125Suite) TestSynthSwap_RuneSynthRune(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	pool := NewPool()
 	pool.Asset = common.BNBAsset
@@ -328,7 +315,7 @@ func (s *SwapVCURSuite) TestSynthSwap_RuneSynthRune(c *C) {
 		expectedRuneBalance := initialBalanceRune.Add(swapAmt).Sub(runeDisbursement)
 		expectedSynthSupply := swapResult.Sub(assetFee)
 
-		amount, _, err := newSwapperVCUR().Swap(ctx, mgr.Keeper(), tx, common.BNBAsset.GetSyntheticAsset(), addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
+		amount, _, err := newSwapperV125().Swap(ctx, mgr.Keeper(), tx, common.BNBAsset.GetSyntheticAsset(), addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
 		c.Assert(err, IsNil)
 		c.Check(amount.Uint64(), Equals, swapResult.Uint64(),
 			Commentf("Actual: %d Exp: %d", amount.Uint64(), swapResult.Uint64()))
@@ -395,7 +382,7 @@ func (s *SwapVCURSuite) TestSynthSwap_RuneSynthRune(c *C) {
 		poolUnitsBefore2 := pool.GetPoolUnits().Mul(pool.GetPoolUnits())
 		luviBefore2 := pool.BalanceRune.Mul(pool.BalanceAsset).Quo(poolUnitsBefore2)
 
-		amount, _, err := newSwapperVCUR().Swap(ctx, mgr.Keeper(), tx, common.RuneAsset(), addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
+		amount, _, err := newSwapperV125().Swap(ctx, mgr.Keeper(), tx, common.RuneAsset(), addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
 		c.Assert(err, IsNil)
 		c.Check(amount.Uint64(), Equals, swapResult.Uint64(),
 			Commentf("Actual: %d Exp: %d", amount.Uint64(), swapResult.Uint64()))
@@ -423,7 +410,7 @@ func (s *SwapVCURSuite) TestSynthSwap_RuneSynthRune(c *C) {
 	}
 }
 
-func (s *SwapVCURSuite) TestSynthSwap_AssetSynth(c *C) {
+func (s *SwapV125Suite) TestSynthSwap_AssetSynth(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	pool := NewPool()
 	pool.Asset = common.BNBAsset
@@ -490,7 +477,7 @@ func (s *SwapVCURSuite) TestSynthSwap_AssetSynth(c *C) {
 	poolUnitsBefore2 := pool.GetPoolUnits().Mul(pool.GetPoolUnits())
 	luviBefore2 := pool.BalanceRune.Mul(pool.BalanceAsset).Quo(poolUnitsBefore2)
 
-	amount, _, err := newSwapperVCUR().Swap(ctx, mgr.Keeper(), tx, common.BNBAsset.GetSyntheticAsset(), addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
+	amount, _, err := newSwapperV125().Swap(ctx, mgr.Keeper(), tx, common.BNBAsset.GetSyntheticAsset(), addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000), 20_000, mgr)
 	c.Assert(err, IsNil)
 	c.Check(amount.Uint64(), Equals, swapResult2.Uint64(),
 		Commentf("Actual: %d Exp: %d", amount.Uint64(), swapResult2.Uint64()))
@@ -535,7 +522,7 @@ func (s *SwapVCURSuite) TestSynthSwap_AssetSynth(c *C) {
 	btcPool.SynthUnits = cosmos.ZeroUint()
 	c.Assert(mgr.Keeper().SetPool(ctx, btcPool), IsNil)
 
-	amount, _, err = newSwapperVCUR().Swap(ctx, mgr.Keeper(), tx1, common.BTCAsset, addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000_000_000), 20_000, mgr)
+	amount, _, err = newSwapperV125().Swap(ctx, mgr.Keeper(), tx1, common.BTCAsset, addr, cosmos.ZeroUint(), "", "", nil, StreamingSwap{}, cosmos.NewUint(1000_000_000_000), 20_000, mgr)
 	c.Assert(err, NotNil)
 	c.Check(amount.IsZero(), Equals, true)
 	pool, err = mgr.Keeper().GetPool(ctx, common.BTCAsset)
@@ -550,50 +537,4 @@ func (s *SwapVCURSuite) TestSynthSwap_AssetSynth(c *C) {
 	// We don't check pool.SynthUnits to not duplicate the calculation here,
 	// but we did check BalanceAsset, LPUnits, and totalSynthSupply, the
 	// three inputs to the calculation.
-}
-
-func (s *SwapVCURSuite) TestSwap_GetSwapCalc(c *C) {
-	swapper := newSwapperVCUR()
-	inputs := []struct {
-		name         string
-		x            cosmos.Uint
-		X            cosmos.Uint
-		Y            cosmos.Uint
-		minSlipBps   cosmos.Uint
-		expectedEmit cosmos.Uint
-		expectedFee  cosmos.Uint
-		expectedSlip cosmos.Uint
-	}{
-		{
-			name:         "no-min-slip",
-			x:            cosmos.NewUint(1e7),
-			X:            cosmos.NewUint(1e8),
-			Y:            cosmos.NewUint(1e8),
-			minSlipBps:   cosmos.NewUint(1e2),
-			expectedEmit: cosmos.NewUint(8264462),
-			expectedFee:  cosmos.NewUint(826446),
-			expectedSlip: cosmos.NewUint(909),
-		},
-		{
-			name:         "min-slip",
-			x:            cosmos.NewUint(1e5),
-			X:            cosmos.NewUint(1e8),
-			Y:            cosmos.NewUint(1e8),
-			minSlipBps:   cosmos.NewUint(1e3),
-			expectedEmit: cosmos.NewUint(89910),
-			expectedFee:  cosmos.NewUint(9990),
-			expectedSlip: cosmos.NewUint(1e3),
-		},
-	}
-	for _, item := range inputs {
-		c.Logf("test name:%s", item.name)
-		slip := swapper.CalcSwapSlip(item.X, item.x)
-		emitAssets, liquidityFee, swapSlip := swapper.GetSwapCalc(item.X, item.x, item.Y, slip, item.minSlipBps)
-		c.Check(swapSlip.Uint64(), Equals, item.expectedSlip.Uint64(),
-			Commentf("Actual: %s Exp: %s", swapSlip.String(), item.expectedSlip.String()))
-		c.Check(emitAssets.Uint64(), Equals, item.expectedEmit.Uint64(),
-			Commentf("Actual: %s Exp: %s", emitAssets.String(), item.expectedEmit.String()))
-		c.Check(liquidityFee.Uint64(), Equals, item.expectedFee.Uint64(),
-			Commentf("Actual: %s Exp: %s", liquidityFee.String(), item.expectedFee.String()))
-	}
 }
