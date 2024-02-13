@@ -19,19 +19,19 @@ import (
 	"gitlab.com/thorchain/thornode/x/thorchain/types"
 )
 
-// SlasherVCUR is VCUR implementation of slasher
-type SlasherVCUR struct {
+// SlasherV127 is V127 implementation of slasher
+type SlasherV127 struct {
 	keeper   keeper.Keeper
 	eventMgr EventManager
 }
 
-// newSlasherVCUR create a new instance of Slasher
-func newSlasherVCUR(keeper keeper.Keeper, eventMgr EventManager) *SlasherVCUR {
-	return &SlasherVCUR{keeper: keeper, eventMgr: eventMgr}
+// newSlasherV127 create a new instance of Slasher
+func newSlasherV127(keeper keeper.Keeper, eventMgr EventManager) *SlasherV127 {
+	return &SlasherV127{keeper: keeper, eventMgr: eventMgr}
 }
 
 // BeginBlock called when a new block get proposed to detect whether there are duplicate vote
-func (s *SlasherVCUR) BeginBlock(ctx cosmos.Context, req abci.RequestBeginBlock, constAccessor constants.ConstantValues) {
+func (s *SlasherV127) BeginBlock(ctx cosmos.Context, req abci.RequestBeginBlock, constAccessor constants.ConstantValues) {
 	var doubleSignEvidence []abci.Evidence
 	// Iterate through any newly discovered evidence of infraction
 	// Slash any validators (and since-unbonded liquidity within the unbonding period)
@@ -101,7 +101,7 @@ func (s *SlasherVCUR) BeginBlock(ctx cosmos.Context, req abci.RequestBeginBlock,
 // HandleDoubleSign - slashes a validator for signing two blocks at the same
 // block height
 // https://blog.cosmos.network/consensus-compare-casper-vs-tendermint-6df154ad56ae
-func (s *SlasherVCUR) HandleDoubleSign(ctx cosmos.Context, addr crypto.Address, infractionHeight int64, constAccessor constants.ConstantValues, validatorAddresses []nodeAddressValidatorAddressPair) error {
+func (s *SlasherV127) HandleDoubleSign(ctx cosmos.Context, addr crypto.Address, infractionHeight int64, constAccessor constants.ConstantValues, validatorAddresses []nodeAddressValidatorAddressPair) error {
 	// check if we're recent enough to slash for this behavior
 	maxAge := constAccessor.GetInt64Value(constants.DoubleSignMaxAge)
 	if (ctx.BlockHeight() - infractionHeight) > maxAge {
@@ -156,7 +156,7 @@ func (s *SlasherVCUR) HandleDoubleSign(ctx cosmos.Context, addr crypto.Address, 
 }
 
 // HandleMissingSign - slashes a validator for not signing a block
-func (s *SlasherVCUR) HandleMissingSign(ctx cosmos.Context, addr crypto.Address, constAccessor constants.ConstantValues, validatorAddresses []nodeAddressValidatorAddressPair) error {
+func (s *SlasherV127) HandleMissingSign(ctx cosmos.Context, addr crypto.Address, constAccessor constants.ConstantValues, validatorAddresses []nodeAddressValidatorAddressPair) error {
 	missBlockSignSlashPoints := s.keeper.GetConfigInt64(ctx, constants.MissBlockSignSlashPoints)
 
 	for _, pair := range validatorAddresses {
@@ -184,7 +184,7 @@ func (s *SlasherVCUR) HandleMissingSign(ctx cosmos.Context, addr crypto.Address,
 }
 
 // LackObserving Slash node accounts that didn't observe a single inbound txn
-func (s *SlasherVCUR) LackObserving(ctx cosmos.Context, constAccessor constants.ConstantValues) error {
+func (s *SlasherV127) LackObserving(ctx cosmos.Context, constAccessor constants.ConstantValues) error {
 	signingTransPeriod := constAccessor.GetInt64Value(constants.SigningTransactionPeriod)
 	height := ctx.BlockHeight()
 	if height < signingTransPeriod {
@@ -214,7 +214,7 @@ func (s *SlasherVCUR) LackObserving(ctx cosmos.Context, constAccessor constants.
 	return nil
 }
 
-func (s *SlasherVCUR) slashNotObserving(ctx cosmos.Context, txHash common.TxID, constAccessor constants.ConstantValues) error {
+func (s *SlasherV127) slashNotObserving(ctx cosmos.Context, txHash common.TxID, constAccessor constants.ConstantValues) error {
 	voter, err := s.keeper.GetObservedTxInVoter(ctx, txHash)
 	if err != nil {
 		return fmt.Errorf("fail to get observe txin voter (%s): %w", txHash.String(), err)
@@ -246,7 +246,7 @@ func (s *SlasherVCUR) slashNotObserving(ctx cosmos.Context, txHash common.TxID, 
 	return nil
 }
 
-func (s *SlasherVCUR) checkSignerAndSlash(ctx cosmos.Context, nodes NodeAccounts, blockHeight int64, signers []cosmos.AccAddress, constAccessor constants.ConstantValues) {
+func (s *SlasherV127) checkSignerAndSlash(ctx cosmos.Context, nodes NodeAccounts, blockHeight int64, signers []cosmos.AccAddress, constAccessor constants.ConstantValues) {
 	for _, na := range nodes {
 		// the node is active after the tx finalised
 		if na.ActiveBlockHeight > blockHeight {
@@ -273,7 +273,7 @@ func (s *SlasherVCUR) checkSignerAndSlash(ctx cosmos.Context, nodes NodeAccounts
 }
 
 // LackSigning slash account that fail to sign tx
-func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
+func (s *SlasherV127) LackSigning(ctx cosmos.Context, mgr Manager) error {
 	var resultErr error
 	signingTransPeriod := mgr.GetConstants().GetInt64Value(constants.SigningTransactionPeriod)
 	if ctx.BlockHeight() < signingTransPeriod {
@@ -284,17 +284,17 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 	if err != nil {
 		return fmt.Errorf("fail to get txout from block height(%d): %w", height, err)
 	}
-	for i, toi := range txs.TxArray {
-		if !common.CurrentChainNetwork.SoftEquals(toi.ToAddress.GetNetwork(mgr.GetVersion(), toi.Chain)) {
+	for i, tx := range txs.TxArray {
+		if !common.CurrentChainNetwork.SoftEquals(tx.ToAddress.GetNetwork(mgr.GetVersion(), tx.Chain)) {
 			continue // skip this transaction
 		}
-		if toi.OutHash.IsEmpty() {
+		if tx.OutHash.IsEmpty() {
 			// Slash node account for not sending funds
-			vault, err := s.keeper.GetVault(ctx, toi.VaultPubKey)
+			vault, err := s.keeper.GetVault(ctx, tx.VaultPubKey)
 			if err != nil {
 				// in some edge cases the vault may no longer exists, in which
 				// case log and continue with rescheduling
-				ctx.Logger().Error("Unable to get vault", "error", err, "vault pub key", toi.VaultPubKey.String())
+				ctx.Logger().Error("Unable to get vault", "error", err, "vault pub key", tx.VaultPubKey.String())
 			}
 
 			// don't reschedule transactions on frozen vaults. This will cause
@@ -306,14 +306,14 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 				if err != nil {
 					ctx.Logger().Error("failed to convert chains", "error", err)
 				}
-				if chains.Has(toi.Coin.Asset.GetChain()) {
+				if chains.Has(tx.Coin.Asset.GetChain()) {
 					etx := common.Tx{
-						ID:        toi.InHash,
-						Chain:     toi.Chain,
-						ToAddress: toi.ToAddress,
-						Coins:     []common.Coin{toi.Coin},
-						Gas:       toi.MaxGas,
-						Memo:      toi.Memo,
+						ID:        tx.InHash,
+						Chain:     tx.Chain,
+						ToAddress: tx.ToAddress,
+						Coins:     []common.Coin{tx.Coin},
+						Gas:       tx.MaxGas,
+						Memo:      tx.Memo,
 					}
 					eve := NewEventSecurity(etx, "skipping reschedule on frozen vault")
 					if err := mgr.EventMgr().EmitEvent(ctx, eve); err != nil {
@@ -323,7 +323,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 				}
 			}
 
-			memo, _ := ParseMemoWithTHORNames(ctx, s.keeper, toi.Memo) // ignore err
+			memo, _ := ParseMemoWithTHORNames(ctx, s.keeper, tx.Memo) // ignore err
 			if memo.IsInternal() {
 				// there is a different mechanism for rescheduling outbound
 				// transactions for migration transactions
@@ -331,7 +331,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 			}
 			var voter ObservedTxVoter
 			if !memo.IsType(TxRagnarok) {
-				voter, err = s.keeper.GetObservedTxInVoter(ctx, toi.InHash)
+				voter, err = s.keeper.GetObservedTxInVoter(ctx, tx.InHash)
 				if err != nil {
 					ctx.Logger().Error("fail to get observed tx voter", "error", err)
 					resultErr = fmt.Errorf("failed to get observed tx voter: %w", err)
@@ -344,7 +344,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 				age := ctx.BlockHeight() - voter.FinalisedHeight
 				attempts := age / signingTransPeriod
 				if attempts >= maxOutboundAttempts {
-					ctx.Logger().Info("txn dropped, too many attempts", "hash", toi.InHash)
+					ctx.Logger().Info("txn dropped, too many attempts", "hash", tx.InHash)
 					continue
 				}
 			}
@@ -352,24 +352,24 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 			// if vault is inactive, do not reassign the outbound txn to
 			// another vault
 			if vault.Status == InactiveVault {
-				ctx.Logger().Info("cannot reassign outbound from inactive vault", "hash", toi.InHash)
+				ctx.Logger().Info("cannot reassign tx from inactive vault", "hash", tx.InHash)
 				continue
 			}
 
-			if s.needsNewVault(ctx, mgr, vault, signingTransPeriod, voter.FinalisedHeight, toi) {
+			if s.needsNewVault(ctx, mgr, vault, signingTransPeriod, voter.FinalisedHeight, tx.InHash, tx.VaultPubKey) {
 				active, err := s.keeper.GetAsgardVaultsByStatus(ctx, ActiveVault)
 				if err != nil {
 					return fmt.Errorf("fail to get active asgard vaults: %w", err)
 				}
 				// Deduct the asset's pending outbound funds to represent only the available funds.
-				pendingOutbounds := mgr.Keeper().GetPendingOutbounds(ctx, toi.Coin.Asset)
+				pendingOutbounds := mgr.Keeper().GetPendingOutbounds(ctx, tx.Coin.Asset)
 				for i := range active {
 					active[i].DeductVaultPendingOutbounds(pendingOutbounds)
 				}
 
 				available := active
-				mainCoin := toi.Coin
-				maxGasCoin, err := mgr.GasMgr().GetMaxGas(ctx, toi.Chain)
+				mainCoin := tx.Coin
+				maxGasCoin, err := mgr.GasMgr().GetMaxGas(ctx, tx.Chain)
 				if err != nil {
 					ctx.Logger().Error("fail to get max gas", "error", err)
 				}
@@ -400,7 +400,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 						vault = active.SortBy(mainCoin.Asset)[0]
 					}
 				} else {
-					rep := int(toi.InHash.Int64() + ctx.BlockHeight()/signingTransPeriod)
+					rep := int(tx.InHash.Int64() + ctx.BlockHeight()/signingTransPeriod)
 					if vault.PubKey.Equals(available[rep%len(available)].PubKey) {
 						// looks like the new vault is going to be the same as the
 						// old vault, increment rep to ensure a differ asgard is
@@ -410,7 +410,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 					vault = available[rep%len(available)]
 				}
 				if !memo.IsType(TxRagnarok) {
-					// update original toi action in observed tx
+					// update original tx action in observed tx
 					// check observedTx has done status. Skip if it does already.
 					voterTx := voter.GetTx(NodeAccounts{})
 					if voterTx.IsDone(len(voter.Actions)) {
@@ -422,18 +422,18 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 
 					// update the actions in the voter with the new vault pubkey
 					for i, action := range voter.Actions {
-						if action.Equals(toi) {
+						if action.Equals(tx) {
 							voter.Actions[i].VaultPubKey = vault.PubKey
 
-							if toi.Aggregator != "" || toi.AggregatorTargetAsset != "" || toi.AggregatorTargetLimit != nil {
-								ctx.Logger().Info("clearing aggregator fields on outbound reassignment", "hash", toi.InHash)
+							if tx.Aggregator != "" || tx.AggregatorTargetAsset != "" || tx.AggregatorTargetLimit != nil {
+								ctx.Logger().Info("clearing aggregator fields on outbound reassignment", "hash", tx.InHash)
 
 								// Here, simultaneously clear the Aggregator information for a reassigned TxOutItem and its Actions item
 								// so that a SwapOut will send the THORChain output asset instead of cycling and swallowingif
 								// (and maybe failing with slashes) if something goes wrong.
-								toi.Aggregator = ""
-								toi.AggregatorTargetAsset = ""
-								toi.AggregatorTargetLimit = nil
+								tx.Aggregator = ""
+								tx.AggregatorTargetAsset = ""
+								tx.AggregatorTargetLimit = nil
 								voter.Actions[i].Aggregator = ""
 								voter.Actions[i].AggregatorTargetAsset = ""
 								voter.Actions[i].AggregatorTargetLimit = nil
@@ -443,29 +443,29 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 					s.keeper.SetObservedTxInVoter(ctx, voter)
 
 				}
-				// Save the toi to as a new toi, select Asgard to send it this time.
-				toi.VaultPubKey = vault.PubKey
+				// Save the tx to as a new tx, select Asgard to send it this time.
+				tx.VaultPubKey = vault.PubKey
 
 				// update max gas
 				if !maxGasCoin.IsEmpty() {
-					toi.MaxGas = common.Gas{maxGasCoin}
+					tx.MaxGas = common.Gas{maxGasCoin}
 					// Update MaxGas in ObservedTxVoter action as well
-					if err := updateTxOutGas(ctx, s.keeper, toi, common.Gas{maxGasCoin}); err != nil {
-						ctx.Logger().Error("Failed to update MaxGas of action in ObservedTxVoter", "hash", toi.InHash, "error", err)
+					if err := updateTxOutGas(ctx, s.keeper, tx, common.Gas{maxGasCoin}); err != nil {
+						ctx.Logger().Error("Failed to update MaxGas of action in ObservedTxVoter", "hash", tx.InHash, "error", err)
 					}
 				}
 				// Equals checks GasRate so update actions GasRate too (before updating in the queue item)
 				// for future updates of MaxGas, which must match for matchActionItem in AddOutTx.
-				gasRate := int64(mgr.GasMgr().GetGasRate(ctx, toi.Chain).Uint64())
-				if err := updateTxOutGasRate(ctx, s.keeper, toi, gasRate); err != nil {
-					ctx.Logger().Error("Failed to update GasRate of action in ObservedTxVoter", "hash", toi.InHash, "error", err)
+				gasRate := int64(mgr.GasMgr().GetGasRate(ctx, tx.Chain).Uint64())
+				if err := updateTxOutGasRate(ctx, s.keeper, tx, gasRate); err != nil {
+					ctx.Logger().Error("Failed to update GasRate of action in ObservedTxVoter", "hash", tx.InHash, "error", err)
 				}
-				toi.GasRate = gasRate
+				tx.GasRate = gasRate
 			}
 
 			// if a pool with the asset name doesn't exist, skip rescheduling
-			if !toi.Coin.Asset.IsRune() && !s.keeper.PoolExist(ctx, toi.Coin.Asset) {
-				ctx.Logger().Error("fail to add outbound to queue", "error", "coin is not rune and does not have an associated pool")
+			if !tx.Coin.Asset.IsRune() && !s.keeper.PoolExist(ctx, tx.Coin.Asset) {
+				ctx.Logger().Error("fail to add outbound tx", "error", "coin is not rune and does not have an associated pool")
 				continue
 			}
 
@@ -476,10 +476,10 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 				rescheduleHeight += rescheduleCoalesceBlocks - (rescheduleHeight % rescheduleCoalesceBlocks)
 			}
 
-			err = mgr.TxOutStore().UnSafeAddTxOutItem(ctx, mgr, toi, rescheduleHeight)
+			err = mgr.TxOutStore().UnSafeAddTxOutItem(ctx, mgr, tx, rescheduleHeight)
 			if err != nil {
-				ctx.Logger().Error("fail to add outbound to queue", "error", err)
-				resultErr = fmt.Errorf("failed to add outbound to queue: %w", err)
+				ctx.Logger().Error("fail to add outbound tx", "error", err)
+				resultErr = fmt.Errorf("failed to add outbound tx: %w", err)
 				continue
 			}
 			// because the txout item has been rescheduled, thus mark the replaced tx out item as already send out, even it is not
@@ -503,7 +503,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 // discover signer send out fund more than the amount specified in TxOutItem,
 // it will slash the node account who does that by taking 1.5 * extra fund from
 // node account's bond and subsidise the pool that actually lost it.
-func (s *SlasherVCUR) SlashVault(ctx cosmos.Context, vaultPK common.PubKey, coins common.Coins, mgr Manager) error {
+func (s *SlasherV127) SlashVault(ctx cosmos.Context, vaultPK common.PubKey, coins common.Coins, mgr Manager) error {
 	if coins.IsEmpty() {
 		return nil
 	}
@@ -615,7 +615,7 @@ func (s *SlasherVCUR) SlashVault(ctx cosmos.Context, vaultPK common.PubKey, coin
 
 // slashAndUpdateNodeAccount slashes a NodeAccount a portion of the value of coin based on their
 // portion of the total bond of the offending Vault's membership. Return the amount of RUNE slashed
-func (s SlasherVCUR) slashAndUpdateNodeAccount(ctx cosmos.Context, na types.NodeAccount, coin common.Coin, vault types.Vault, totalBond, totalSlashAmountInRune cosmos.Uint) cosmos.Uint {
+func (s SlasherV127) slashAndUpdateNodeAccount(ctx cosmos.Context, na types.NodeAccount, coin common.Coin, vault types.Vault, totalBond, totalSlashAmountInRune cosmos.Uint) cosmos.Uint {
 	slashAmountRune := common.GetSafeShare(na.Bond, totalBond, totalSlashAmountInRune)
 	if slashAmountRune.GT(na.Bond) {
 		ctx.Logger().Info("slash amount is larger than bond", "slash amount", slashAmountRune, "bond", na.Bond)
@@ -656,7 +656,7 @@ func (s SlasherVCUR) slashAndUpdateNodeAccount(ctx cosmos.Context, na types.Node
 }
 
 // IncSlashPoints will increase the given account's slash points
-func (s *SlasherVCUR) IncSlashPoints(ctx cosmos.Context, point int64, addresses ...cosmos.AccAddress) {
+func (s *SlasherV127) IncSlashPoints(ctx cosmos.Context, point int64, addresses ...cosmos.AccAddress) {
 	for _, addr := range addresses {
 		if err := s.keeper.IncNodeAccountSlashPoints(ctx, addr, point); err != nil {
 			ctx.Logger().Error("fail to increase node account slash point", "error", err, "address", addr.String())
@@ -665,7 +665,7 @@ func (s *SlasherVCUR) IncSlashPoints(ctx cosmos.Context, point int64, addresses 
 }
 
 // DecSlashPoints will decrease the given account's slash points
-func (s *SlasherVCUR) DecSlashPoints(ctx cosmos.Context, point int64, addresses ...cosmos.AccAddress) {
+func (s *SlasherV127) DecSlashPoints(ctx cosmos.Context, point int64, addresses ...cosmos.AccAddress) {
 	for _, addr := range addresses {
 		if err := s.keeper.DecNodeAccountSlashPoints(ctx, addr, point); err != nil {
 			ctx.Logger().Error("fail to decrease node account slash point", "error", err, "address", addr.String())
@@ -674,7 +674,7 @@ func (s *SlasherVCUR) DecSlashPoints(ctx cosmos.Context, point int64, addresses 
 }
 
 // updatePoolFromSlash updates a pool's depths and emits appropriate events after a slash
-func (s *SlasherVCUR) updatePoolFromSlash(ctx cosmos.Context, pool types.Pool, stolenAsset common.Coin, runeCreditAmt cosmos.Uint, mgr Manager) {
+func (s *SlasherV127) updatePoolFromSlash(ctx cosmos.Context, pool types.Pool, stolenAsset common.Coin, runeCreditAmt cosmos.Uint, mgr Manager) {
 	pool.BalanceAsset = common.SafeSub(pool.BalanceAsset, stolenAsset.Amount)
 	pool.BalanceRune = pool.BalanceRune.Add(runeCreditAmt)
 	if err := s.keeper.SetPool(ctx, pool); err != nil {
@@ -696,8 +696,8 @@ func (s *SlasherVCUR) updatePoolFromSlash(ctx cosmos.Context, pool types.Pool, s
 	}
 }
 
-func (s *SlasherVCUR) needsNewVault(ctx cosmos.Context, mgr Manager, vault Vault, signingTransPeriod, startHeight int64, toi TxOutItem) bool {
-	outhashes := mgr.Keeper().GetObservedLink(ctx, toi.InHash)
+func (s *SlasherV127) needsNewVault(ctx cosmos.Context, mgr Manager, vault Vault, signingTransPeriod, startHeight int64, inhash common.TxID, pk common.PubKey) bool {
+	outhashes := mgr.Keeper().GetObservedLink(ctx, inhash)
 	if len(outhashes) == 0 {
 		return true
 	}
@@ -708,29 +708,19 @@ func (s *SlasherVCUR) needsNewVault(ctx cosmos.Context, mgr Manager, vault Vault
 			ctx.Logger().Error("fail to get txout voter", "hash", hash, "error", err)
 			continue
 		}
-		if voter.FinalisedHeight > 0 {
-			// Finalised observed txouts should have nothing to do with unfulfilled TxOutItems.
-			// This finalised txout might for instance be from an output
-			// that was split into multiple outbounds from initially-different vaults.
-			continue
-		}
-		// in the event there are multiple observed txouts for a given inhash, we
-		// focus on the matching pubkey and asset
+		// in the event there are multiple outbounds for a given inhash, we
+		// focus on the matching pubkey
 		signers := make(map[string]bool)
 		for _, tx1 := range voter.Txs {
-			if !tx1.ObservedPubKey.Equals(toi.VaultPubKey) ||
-				len(tx1.Tx.Coins) != 1 ||
-				!tx1.Tx.Coins[0].Asset.Equals(toi.Coin.Asset) {
-				continue
-			}
-
-			for _, tx := range voter.Txs {
-				if !tx.Tx.ID.Equals(hash) {
-					continue
-				}
-				for _, signer := range tx.Signers {
-					// Uniquely record each signer for this outbound hash.
-					signers[signer] = true
+			if tx1.ObservedPubKey.Equals(pk) {
+				for _, tx := range voter.Txs {
+					if !tx.Tx.ID.Equals(hash) {
+						continue
+					}
+					for _, signer := range tx.Signers {
+						// Uniquely record each signer for this outbound hash.
+						signers[signer] = true
+					}
 				}
 			}
 		}
