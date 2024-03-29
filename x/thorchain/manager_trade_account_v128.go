@@ -6,22 +6,22 @@ import (
 	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
 )
 
-// TradeMgrVCUR is VCUR implementation of slasher
-type TradeMgrVCUR struct {
+// TradeMgrV128 is V128 implementation of slasher
+type TradeMgrV128 struct {
 	keeper keeper.Keeper
 }
 
-// newTradeMgrVCUR create a new instance of Slasher
-func newTradeMgrVCUR(keeper keeper.Keeper) *TradeMgrVCUR {
-	return &TradeMgrVCUR{keeper: keeper}
+// newTradeMgrV128 create a new instance of Slasher
+func newTradeMgrV128(keeper keeper.Keeper) *TradeMgrV128 {
+	return &TradeMgrV128{keeper: keeper}
 }
 
-func (s *TradeMgrVCUR) EndBlock(ctx cosmos.Context, keeper keeper.Keeper) error {
+func (s *TradeMgrV128) EndBlock(ctx cosmos.Context, keeper keeper.Keeper) error {
 	// TODO: implement liquidation
 	return nil
 }
 
-func (s *TradeMgrVCUR) BalanceOf(ctx cosmos.Context, asset common.Asset, addr cosmos.AccAddress) cosmos.Uint {
+func (s *TradeMgrV128) BalanceOf(ctx cosmos.Context, asset common.Asset, addr cosmos.AccAddress) cosmos.Uint {
 	asset = asset.GetTradeAsset()
 	tu, err := s.keeper.GetTradeUnit(ctx, asset)
 	if err != nil {
@@ -33,11 +33,10 @@ func (s *TradeMgrVCUR) BalanceOf(ctx cosmos.Context, asset common.Asset, addr co
 		return cosmos.ZeroUint()
 	}
 
-	// Proportion of total Depth that the account's Units entitle it to:
-	return common.GetSafeShare(tr.Units, tu.Units, tu.Depth)
+	return common.GetSafeShare(tu.Units, tu.Depth, tr.Units)
 }
 
-func (s *TradeMgrVCUR) Deposit(ctx cosmos.Context, asset common.Asset, amount cosmos.Uint, addr cosmos.AccAddress) (cosmos.Uint, error) {
+func (s *TradeMgrV128) Deposit(ctx cosmos.Context, asset common.Asset, amount cosmos.Uint, addr cosmos.AccAddress) (cosmos.Uint, error) {
 	asset = asset.GetTradeAsset()
 	tu, err := s.keeper.GetTradeUnit(ctx, asset)
 	if err != nil {
@@ -61,7 +60,7 @@ func (s *TradeMgrVCUR) Deposit(ctx cosmos.Context, asset common.Asset, amount co
 	return amount, nil
 }
 
-func (s *TradeMgrVCUR) calcDepositUnits(oldUnits, depth, add cosmos.Uint) cosmos.Uint {
+func (s *TradeMgrV128) calcDepositUnits(oldUnits, depth, add cosmos.Uint) cosmos.Uint {
 	if oldUnits.IsZero() || depth.IsZero() {
 		return add
 	}
@@ -71,7 +70,7 @@ func (s *TradeMgrVCUR) calcDepositUnits(oldUnits, depth, add cosmos.Uint) cosmos
 	return common.GetUncappedShare(add, depth, oldUnits)
 }
 
-func (s *TradeMgrVCUR) Withdrawal(ctx cosmos.Context, asset common.Asset, amount cosmos.Uint, addr cosmos.AccAddress) (cosmos.Uint, error) {
+func (s *TradeMgrV128) Withdrawal(ctx cosmos.Context, asset common.Asset, amount cosmos.Uint, addr cosmos.AccAddress) (cosmos.Uint, error) {
 	asset = asset.GetTradeAsset()
 	tu, err := s.keeper.GetTradeUnit(ctx, asset)
 	if err != nil {
@@ -84,18 +83,10 @@ func (s *TradeMgrVCUR) Withdrawal(ctx cosmos.Context, asset common.Asset, amount
 	}
 	tr.LastWithdrawHeight = ctx.BlockHeight()
 
-	// assetAvailable is the same as BalanceOf:
-	// Proportion of total Depth that the account's Units entitle it to:
-	assetAvailable := common.GetSafeShare(tr.Units, tu.Units, tu.Depth)
-
-	// unitsToClaim is the account's units for the specified amount to be withdrawn from assetAvailable,
-	// capped at the accounts total Units.
+	assetAvailable := common.GetSafeShare(tu.Units, tu.Depth, tr.Units)
 	unitsToClaim := common.GetSafeShare(amount, assetAvailable, tr.Units)
 
-	// tokensToClaim is the exact amount to be withdrawn from those unitsToClaim,
-	// capped at the account's assetAvailable.
-	tokensToClaim := common.GetSafeShare(unitsToClaim, tr.Units, assetAvailable)
-
+	tokensToClaim := common.GetSafeShare(unitsToClaim, tu.Units, tu.Depth)
 	tu.Units = common.SafeSub(tu.Units, unitsToClaim)
 	tr.Units = common.SafeSub(tr.Units, unitsToClaim)
 	tu.Depth = common.SafeSub(tu.Depth, tokensToClaim)
