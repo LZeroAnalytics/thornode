@@ -14,14 +14,14 @@ import (
 	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
 )
 
-type SwapperVCUR struct{}
+type SwapperV129 struct{}
 
-func newSwapperVCUR() *SwapperVCUR {
-	return &SwapperVCUR{}
+func newSwapperV129() *SwapperV129 {
+	return &SwapperV129{}
 }
 
 // validateMessage is trying to validate the legitimacy of the incoming message and decide whether THORNode can handle it
-func (s *SwapperVCUR) validateMessage(tx common.Tx, target common.Asset, destination common.Address) error {
+func (s *SwapperV129) validateMessage(tx common.Tx, target common.Asset, destination common.Address) error {
 	if err := tx.Valid(); err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func (s *SwapperVCUR) validateMessage(tx common.Tx, target common.Asset, destina
 	return nil
 }
 
-func (s *SwapperVCUR) Swap(ctx cosmos.Context,
+func (s *SwapperV129) Swap(ctx cosmos.Context,
 	keeper keeper.Keeper,
 	tx common.Tx,
 	target common.Asset,
@@ -51,7 +51,7 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 	dexAggTargetAsset string,
 	dexAggLimit *cosmos.Uint,
 	swp StreamingSwap,
-	_ cosmos.Uint, synthVirtualDepthMult int64, mgr Manager,
+	transactionFee cosmos.Uint, synthVirtualDepthMult int64, mgr Manager,
 ) (cosmos.Uint, []*EventSwap, error) {
 	var swapEvents []*EventSwap
 
@@ -86,7 +86,7 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 		var swapEvt *EventSwap
 		var amt cosmos.Uint
 		// Here we use a swapTarget of 0 because the target is for the next swap asset in a double swap
-		amt, swapEvt, swapErr = s.swapOne(ctx, mgr, tx, common.RuneAsset(), destination, cosmos.ZeroUint(), synthVirtualDepthMult)
+		amt, swapEvt, swapErr = s.swapOne(ctx, mgr, tx, common.RuneAsset(), destination, cosmos.ZeroUint(), transactionFee, synthVirtualDepthMult)
 		if swapErr != nil {
 			return cosmos.ZeroUint(), swapEvents, swapErr
 		}
@@ -94,7 +94,7 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 		tx.Gas = nil
 		swapEvents = append(swapEvents, swapEvt)
 	}
-	assetAmount, swapEvt, swapErr := s.swapOne(ctx, mgr, tx, target, destination, swapTarget, synthVirtualDepthMult)
+	assetAmount, swapEvt, swapErr := s.swapOne(ctx, mgr, tx, target, destination, swapTarget, transactionFee, synthVirtualDepthMult)
 	if swapErr != nil {
 		return cosmos.ZeroUint(), swapEvents, swapErr
 	}
@@ -104,6 +104,11 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 		// catch the error. DO NOT change this error string without updating
 		// the order book manager as well
 		return cosmos.ZeroUint(), swapEvents, fmt.Errorf("emit asset %s less than price limit %s", assetAmount, swapTarget)
+	}
+	if target.IsRune() {
+		if assetAmount.LTE(transactionFee) {
+			return cosmos.ZeroUint(), swapEvents, fmt.Errorf("output RUNE (%s) is not enough to pay transaction fee", assetAmount)
+		}
 	}
 	// emit asset is zero
 	if assetAmount.IsZero() {
@@ -175,21 +180,26 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 	return assetAmount, swapEvents, nil
 }
 
-func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
+func (s *SwapperV129) swapOne(ctx cosmos.Context,
 	mgr Manager, tx common.Tx,
 	target common.Asset,
 	destination common.Address,
 	swapTarget cosmos.Uint,
+	transactionFee cosmos.Uint,
 	synthVirtualDepthMult int64,
 ) (amt cosmos.Uint, evt *EventSwap, swapErr error) {
 	source := tx.Coins[0].Asset
 	amount := tx.Coins[0].Amount
 
-	ctx.Logger().Info("swapping", "from", tx.FromAddress, "coins", tx.Coins[0], "target", target, "to", destination)
+	ctx.Logger().Info("swapping", "from", tx.FromAddress, "coins", tx.Coins[0], "target", target, "to", destination, "fee", transactionFee)
 
 	// Set asset to our pool asset
 	var poolAsset common.Asset
 	if source.IsRune() {
+		if amount.LTE(transactionFee) {
+			// stop swap , because the output will not enough to pay for transaction fee
+			return cosmos.ZeroUint(), evt, errSwapFailNotEnoughFee
+		}
 		poolAsset = target.GetLayer1Asset()
 	} else {
 		poolAsset = source.GetLayer1Asset()
@@ -405,7 +415,7 @@ func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
 
 // calculate the number of assets sent to the address (includes liquidity fee)
 // nolint
-func (s *SwapperVCUR) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
+func (s *SwapperV129) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
 	// ( x * X * Y ) / ( x + X )^2
 	numerator := x.Mul(X).Mul(Y)
 	denominator := x.Add(X).Mul(x.Add(X))
@@ -417,7 +427,7 @@ func (s *SwapperVCUR) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
 
 // calculate the asset amount to be sent to address using a predefined fee (fee calculated using artificial floor)
 // nolint
-func (s *SwapperVCUR) CalcMaxAssetEmission(X, x, Y, fee cosmos.Uint) cosmos.Uint {
+func (s *SwapperV129) CalcMaxAssetEmission(X, x, Y, fee cosmos.Uint) cosmos.Uint {
 	// (( x * Y ) / ( x + X )) - fee
 	numerator := x.Mul(Y)
 	denominator := x.Add(X)
@@ -429,7 +439,7 @@ func (s *SwapperVCUR) CalcMaxAssetEmission(X, x, Y, fee cosmos.Uint) cosmos.Uint
 
 // CalculateLiquidityFee the fee of the swap
 // nolint
-func (s *SwapperVCUR) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
+func (s *SwapperV129) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
 	// ( x^2 *  Y ) / ( x + X )^2
 	numerator := x.Mul(x).Mul(Y)
 	denominator := x.Add(X).Mul(x.Add(X))
@@ -441,7 +451,7 @@ func (s *SwapperVCUR) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
 
 // CalcMinLiquidityFee calculates the fee of the swap using min artificial slip floor
 // nolint
-func (s *SwapperVCUR) CalcMinLiquidityFee(X, x, Y, minSlipBps cosmos.Uint) cosmos.Uint {
+func (s *SwapperV129) CalcMinLiquidityFee(X, x, Y, minSlipBps cosmos.Uint) cosmos.Uint {
 	// minSlip * ( x  *  Y ) / ( x + X )
 	numerator := common.GetSafeShare(minSlipBps, cosmos.NewUint(constants.MaxBasisPts), x.Mul(Y))
 	denominator := x.Add(X)
@@ -453,7 +463,7 @@ func (s *SwapperVCUR) CalcMinLiquidityFee(X, x, Y, minSlipBps cosmos.Uint) cosmo
 
 // CalcSwapSlip - calculate the swap slip, expressed in basis points (10000)
 // nolint
-func (s *SwapperVCUR) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
+func (s *SwapperV129) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
 	// Cast to DECs
 	xD := cosmos.NewDecFromBigInt(xi.BigInt())
 	XD := cosmos.NewDecFromBigInt(Xi.BigInt())
@@ -471,7 +481,7 @@ func (s *SwapperVCUR) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
 
 // GetSwapCalc returns emission, liquidity fee and slip for a swap
 // nolint
-func (s *SwapperVCUR) GetSwapCalc(X, x, Y, slipBps, minSlipBps cosmos.Uint) (emitAssets, liquidityFee, slip cosmos.Uint) {
+func (s *SwapperV129) GetSwapCalc(X, x, Y, slipBps, minSlipBps cosmos.Uint) (emitAssets, liquidityFee, slip cosmos.Uint) {
 	if minSlipBps.GT(slipBps) {
 		// adjust calc emission based on artificial floor
 		liquidityFee = s.CalcMinLiquidityFee(X, x, Y, minSlipBps)
@@ -486,7 +496,7 @@ func (s *SwapperVCUR) GetSwapCalc(X, x, Y, slipBps, minSlipBps cosmos.Uint) (emi
 }
 
 // MinSlipBps returns artificial slip floor, expressed in basis points (10000)
-func (s *SwapperVCUR) MinSlipBps(
+func (s *SwapperV129) MinSlipBps(
 	ctx cosmos.Context,
 	k keeper.Keeper,
 	isSynth bool,
