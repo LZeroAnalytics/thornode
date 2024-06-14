@@ -8,15 +8,15 @@ import (
 	"gitlab.com/thorchain/thornode/constants"
 )
 
-type GasManagerTestSuiteVCUR struct{}
+type GasManagerTestSuiteV132 struct{}
 
-var _ = Suite(&GasManagerTestSuiteVCUR{})
+var _ = Suite(&GasManagerTestSuiteV132{})
 
-func (GasManagerTestSuiteVCUR) TestGasManagerVCUR(c *C) {
+func (GasManagerTestSuiteV132) TestGasManagerV132(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	k := mgr.K
 	constAccessor := constants.GetConstantValues(GetCurrentVersion())
-	gasMgr := newGasMgrVCUR(constAccessor, k)
+	gasMgr := newGasMgrV132(constAccessor, k)
 	gasEvent := gasMgr.gasEvent
 	c.Assert(gasMgr, NotNil)
 	gasMgr.BeginBlock(mgr)
@@ -46,11 +46,11 @@ func (GasManagerTestSuiteVCUR) TestGasManagerVCUR(c *C) {
 	gasMgr.EndBlock(ctx, k, eventMgr)
 }
 
-func (GasManagerTestSuiteVCUR) TestGetAssetOutboundFee(c *C) {
+func (GasManagerTestSuiteV132) TestGetAssetOutboundFee(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	k := mgr.Keeper()
 	constAccessor := constants.GetConstantValues(GetCurrentVersion())
-	gasMgr := newGasMgrVCUR(constAccessor, k)
+	gasMgr := newGasMgrV132(constAccessor, k)
 	gasMgr.BeginBlock(mgr)
 
 	// when there is no network fee available, 0 fee and nil error should be returned
@@ -135,8 +135,9 @@ func (GasManagerTestSuiteVCUR) TestGetAssetOutboundFee(c *C) {
 	// A trade asset with inRune true should return the fee in RUNE, not in the trade asset.
 	runeFee, err := gasMgr.GetAssetOutboundFee(ctx, tradeAsset, true)
 	c.Assert(err, IsNil)
-	c.Assert(runeFee.String(), Equals, "2000000")
-	c.Assert(runeFee.Equal(tradeAssetFee), Equals, false)
+	c.Assert(runeFee.String(), Equals, "400000")
+	c.Assert(runeFee.Equal(tradeAssetFee), Equals, true)
+	// The returned fee for inRune true is the same as inRune false, though it shouldn't be.
 
 	// when MinimumL1OutboundFeeUSD set to something higher, it should override the network fee
 	busdAsset, err := common.NewAsset("BNB.BUSD-BD1")
@@ -215,11 +216,11 @@ func (GasManagerTestSuiteVCUR) TestGetAssetOutboundFee(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (GasManagerTestSuiteVCUR) TestDifferentValidations(c *C) {
+func (GasManagerTestSuiteV132) TestDifferentValidations(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	k := mgr.Keeper()
 	constAccessor := constants.GetConstantValues(GetCurrentVersion())
-	gasMgr := newGasMgrVCUR(constAccessor, k)
+	gasMgr := newGasMgrV132(constAccessor, k)
 	gasMgr.BeginBlock(mgr)
 	helper := newGasManagerTestHelper(k)
 	eventMgr := NewDummyEventMgr()
@@ -250,10 +251,10 @@ func (GasManagerTestSuiteVCUR) TestDifferentValidations(c *C) {
 	gasMgr.EndBlock(ctx, helper, eventMgr)
 }
 
-func (GasManagerTestSuiteVCUR) TestGetMaxGas(c *C) {
+func (GasManagerTestSuiteV132) TestGetMaxGas(c *C) {
 	ctx, k := setupKeeperForTest(c)
 	constAccessor := constants.GetConstantValues(GetCurrentVersion())
-	gasMgr := newGasMgrVCUR(constAccessor, k)
+	gasMgr := newGasMgrV132(constAccessor, k)
 	gasCoin, err := gasMgr.GetMaxGas(ctx, common.BTCChain)
 	c.Assert(err, IsNil)
 	c.Assert(gasCoin.Amount.IsZero(), Equals, true)
@@ -270,10 +271,10 @@ func (GasManagerTestSuiteVCUR) TestGetMaxGas(c *C) {
 	c.Assert(gasCoin.Amount.Uint64(), Equals, uint64(23400))
 }
 
-func (GasManagerTestSuiteVCUR) TestOutboundFeeMultiplier(c *C) {
+func (GasManagerTestSuiteV132) TestOutboundFeeMultiplier(c *C) {
 	ctx, k := setupKeeperForTest(c)
 	constAccessor := constants.GetConstantValues(GetCurrentVersion())
-	gasMgr := newGasMgrVCUR(constAccessor, k)
+	gasMgr := newGasMgrV132(constAccessor, k)
 
 	targetSurplus := cosmos.NewUint(100_00000000) // 100 $RUNE
 	minMultiplier := cosmos.NewUint(15_000)
