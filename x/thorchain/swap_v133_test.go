@@ -10,17 +10,17 @@ import (
 	"gitlab.com/thorchain/thornode/common/cosmos"
 )
 
-type SwapVCURSuite struct{}
+type SwapV133Suite struct{}
 
-var _ = Suite(&SwapVCURSuite{})
+var _ = Suite(&SwapV133Suite{})
 
-func (s *SwapVCURSuite) SetUpSuite(c *C) {
+func (s *SwapV133Suite) SetUpSuite(c *C) {
 	err := os.Setenv("NET", "other")
 	c.Assert(err, IsNil)
 	SetupConfigForTest()
 }
 
-func (s *SwapVCURSuite) TestSwap(c *C) {
+func (s *SwapV133Suite) TestSwap(c *C) {
 	poolStorage := &TestSwapKeeper{}
 	inputs := []struct {
 		name          string
@@ -262,7 +262,7 @@ func (s *SwapVCURSuite) TestSwap(c *C) {
 	}
 }
 
-func (s *SwapVCURSuite) TestSynthSwap_RuneSynthRune(c *C) {
+func (s *SwapV133Suite) TestSynthSwap_RuneSynthRune(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	pool := NewPool()
 	pool.Asset = common.BNBAsset
@@ -423,7 +423,7 @@ func (s *SwapVCURSuite) TestSynthSwap_RuneSynthRune(c *C) {
 	}
 }
 
-func (s *SwapVCURSuite) TestSynthSwap_AssetSynth(c *C) {
+func (s *SwapV133Suite) TestSynthSwap_AssetSynth(c *C) {
 	ctx, mgr := setupManagerForTest(c)
 	pool := NewPool()
 	pool.Asset = common.BNBAsset
@@ -552,7 +552,7 @@ func (s *SwapVCURSuite) TestSynthSwap_AssetSynth(c *C) {
 	// three inputs to the calculation.
 }
 
-func (s *SwapVCURSuite) TestSwap_GetSwapCalc(c *C) {
+func (s *SwapV133Suite) TestSwap_GetSwapCalc(c *C) {
 	swapper := newSwapperVCUR()
 	inputs := []struct {
 		name         string
