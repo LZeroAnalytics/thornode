@@ -10,17 +10,18 @@ import (
 	"gitlab.com/thorchain/thornode/common"
 	"gitlab.com/thorchain/thornode/common/cosmos"
 	"gitlab.com/thorchain/thornode/constants"
+	"gitlab.com/thorchain/thornode/mimir"
 	"gitlab.com/thorchain/thornode/x/thorchain/keeper"
 )
 
-type SwapperVCUR struct{}
+type SwapperV133 struct{}
 
-func newSwapperVCUR() *SwapperVCUR {
-	return &SwapperVCUR{}
+func newSwapperV133() *SwapperV133 {
+	return &SwapperV133{}
 }
 
 // validateMessage is trying to validate the legitimacy of the incoming message and decide whether THORNode can handle it
-func (s *SwapperVCUR) validateMessage(tx common.Tx, target common.Asset, destination common.Address) error {
+func (s *SwapperV133) validateMessage(tx common.Tx, target common.Asset, destination common.Address) error {
 	if err := tx.Valid(); err != nil {
 		return err
 	}
@@ -40,7 +41,7 @@ func (s *SwapperVCUR) validateMessage(tx common.Tx, target common.Asset, destina
 	return nil
 }
 
-func (s *SwapperVCUR) Swap(ctx cosmos.Context,
+func (s *SwapperV133) Swap(ctx cosmos.Context,
 	keeper keeper.Keeper,
 	tx common.Tx,
 	target common.Asset,
@@ -174,15 +175,13 @@ func (s *SwapperVCUR) Swap(ctx cosmos.Context,
 	return assetAmount, swapEvents, nil
 }
 
-func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
+func (s *SwapperV133) swapOne(ctx cosmos.Context,
 	mgr Manager, tx common.Tx,
 	target common.Asset,
 	destination common.Address,
 	swapTarget cosmos.Uint,
 	synthVirtualDepthMult int64,
 ) (amt cosmos.Uint, evt *EventSwap, swapErr error) {
-	tradeAccountsEnabled := mgr.Keeper().GetConfigInt64(ctx, constants.TradeAccountsEnabled)
-
 	source := tx.Coins[0].Asset
 	amount := tx.Coins[0].Amount
 
@@ -197,8 +196,8 @@ func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
 	}
 
 	if source.IsTradeAsset() {
-		if tradeAccountsEnabled <= 0 {
-			return cosmos.ZeroUint(), evt, fmt.Errorf("trade accounts are disabled")
+		if mimir.NewTradeAccountsEnabled().IsOff(ctx, mgr.Keeper()) {
+			return cosmos.ZeroUint(), evt, fmt.Errorf("trade account is disabled")
 		}
 		fromAcc, err := cosmos.AccAddressFromBech32(tx.FromAddress.String())
 		if err != nil {
@@ -365,8 +364,8 @@ func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
 
 	// if target is trade account, deposit the asset to trade account
 	if target.IsTradeAsset() {
-		if tradeAccountsEnabled <= 0 {
-			return cosmos.ZeroUint(), evt, fmt.Errorf("trade accounts are disabled")
+		if mimir.NewTradeAccountsEnabled().IsOff(ctx, keeper) {
+			return cosmos.ZeroUint(), evt, fmt.Errorf("trade account is disabled")
 		}
 		acc, err := destination.AccAddress()
 		if err != nil {
@@ -406,7 +405,7 @@ func (s *SwapperVCUR) swapOne(ctx cosmos.Context,
 
 // calculate the number of assets sent to the address (includes liquidity fee)
 // nolint
-func (s *SwapperVCUR) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
+func (s *SwapperV133) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
 	// ( x * X * Y ) / ( x + X )^2
 	numerator := x.Mul(X).Mul(Y)
 	denominator := x.Add(X).Mul(x.Add(X))
@@ -418,7 +417,7 @@ func (s *SwapperVCUR) CalcAssetEmission(X, x, Y cosmos.Uint) cosmos.Uint {
 
 // calculate the asset amount to be sent to address using a predefined fee (fee calculated using artificial floor)
 // nolint
-func (s *SwapperVCUR) CalcMaxAssetEmission(X, x, Y, fee cosmos.Uint) cosmos.Uint {
+func (s *SwapperV133) CalcMaxAssetEmission(X, x, Y, fee cosmos.Uint) cosmos.Uint {
 	// (( x * Y ) / ( x + X )) - fee
 	numerator := x.Mul(Y)
 	denominator := x.Add(X)
@@ -430,7 +429,7 @@ func (s *SwapperVCUR) CalcMaxAssetEmission(X, x, Y, fee cosmos.Uint) cosmos.Uint
 
 // CalculateLiquidityFee the fee of the swap
 // nolint
-func (s *SwapperVCUR) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
+func (s *SwapperV133) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
 	// ( x^2 *  Y ) / ( x + X )^2
 	numerator := x.Mul(x).Mul(Y)
 	denominator := x.Add(X).Mul(x.Add(X))
@@ -442,7 +441,7 @@ func (s *SwapperVCUR) CalcLiquidityFee(X, x, Y cosmos.Uint) cosmos.Uint {
 
 // CalcMinLiquidityFee calculates the fee of the swap using min artificial slip floor
 // nolint
-func (s *SwapperVCUR) CalcMinLiquidityFee(X, x, Y, minSlipBps cosmos.Uint) cosmos.Uint {
+func (s *SwapperV133) CalcMinLiquidityFee(X, x, Y, minSlipBps cosmos.Uint) cosmos.Uint {
 	// minSlip * ( x  *  Y ) / ( x + X )
 	numerator := common.GetSafeShare(minSlipBps, cosmos.NewUint(constants.MaxBasisPts), x.Mul(Y))
 	denominator := x.Add(X)
@@ -454,7 +453,7 @@ func (s *SwapperVCUR) CalcMinLiquidityFee(X, x, Y, minSlipBps cosmos.Uint) cosmo
 
 // CalcSwapSlip - calculate the swap slip, expressed in basis points (10000)
 // nolint
-func (s *SwapperVCUR) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
+func (s *SwapperV133) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
 	// Cast to DECs
 	xD := cosmos.NewDecFromBigInt(xi.BigInt())
 	XD := cosmos.NewDecFromBigInt(Xi.BigInt())
@@ -472,7 +471,7 @@ func (s *SwapperVCUR) CalcSwapSlip(Xi, xi cosmos.Uint) cosmos.Uint {
 
 // GetSwapCalc returns emission, liquidity fee and slip for a swap
 // nolint
-func (s *SwapperVCUR) GetSwapCalc(X, x, Y, slipBps, minSlipBps cosmos.Uint) (emitAssets, liquidityFee, slip cosmos.Uint) {
+func (s *SwapperV133) GetSwapCalc(X, x, Y, slipBps, minSlipBps cosmos.Uint) (emitAssets, liquidityFee, slip cosmos.Uint) {
 	if minSlipBps.GT(slipBps) {
 		// adjust calc emission based on artificial floor
 		liquidityFee = s.CalcMinLiquidityFee(X, x, Y, minSlipBps)
@@ -487,21 +486,28 @@ func (s *SwapperVCUR) GetSwapCalc(X, x, Y, slipBps, minSlipBps cosmos.Uint) (emi
 }
 
 // MinSlipBps returns artificial slip floor, expressed in basis points (10000)
-func (s *SwapperVCUR) MinSlipBps(
+func (s *SwapperV133) MinSlipBps(
 	ctx cosmos.Context,
 	k keeper.Keeper,
 	isSynth bool,
 	isTradeAccount bool,
 ) cosmos.Uint {
-	var ref constants.ConstantName
+	var ref string
 	switch {
 	case isSynth:
-		ref = constants.SynthSlipMinBps
+		ref = constants.MimirRefSynth
 	case isTradeAccount:
-		ref = constants.TradeAccountsSlipMinBps
+		ref = constants.MimirRefTradeAccount
 	default:
-		ref = constants.L1SlipMinBps
+		ref = constants.MimirRefL1
 	}
-	minFeeMimir := k.GetConfigInt64(ctx, ref)
+	key := fmt.Sprintf(constants.MimirTemplateSwapSlipBasisPointsMin, ref)
+	minFeeMimir, err := k.GetMimir(ctx, key)
+	if minFeeMimir < 0 || err != nil {
+		if err != nil {
+			ctx.Logger().Error("fail to get mimir", "key", key, "error", err)
+		}
+		return cosmos.ZeroUint()
+	}
 	return cosmos.SafeUintFromInt64(minFeeMimir)
 }
