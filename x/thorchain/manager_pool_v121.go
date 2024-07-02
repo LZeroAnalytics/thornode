@@ -5,20 +5,19 @@ import (
 
 	"github.com/armon/go-metrics"
 	"github.com/cosmos/cosmos-sdk/telemetry"
-	"github.com/cosmos/cosmos-sdk/types"
 	"gitlab.com/thorchain/thornode/common"
 	"gitlab.com/thorchain/thornode/common/cosmos"
 	"gitlab.com/thorchain/thornode/constants"
 )
 
-type PoolMgrVCUR struct{}
+type PoolMgrV121 struct{}
 
-func newPoolMgrVCUR() *PoolMgrVCUR {
-	return &PoolMgrVCUR{}
+func newPoolMgrV121() *PoolMgrV121 {
+	return &PoolMgrV121{}
 }
 
 // EndBlock cycle pools if required and if ragnarok is not in progress
-func (pm *PoolMgrVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
+func (pm *PoolMgrV121) EndBlock(ctx cosmos.Context, mgr Manager) error {
 	poolCycle, err := mgr.Keeper().GetMimir(ctx, constants.PoolCycle.String())
 	if poolCycle < 0 || err != nil {
 		poolCycle = mgr.GetConstants().GetInt64Value(constants.PoolCycle)
@@ -42,10 +41,6 @@ func (pm *PoolMgrVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 		}
 	}
 	pm.cleanupPendingLiquidity(ctx, mgr)
-	if err = pm.checkSaversUtilization(ctx, mgr); err != nil {
-		ctx.Logger().Error("Unable to force withdraw saver position", "error", err)
-	}
-
 	return nil
 }
 
@@ -58,7 +53,7 @@ func (pm *PoolMgrVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 // The valid Staged pool with the highest rune depth is promoted to Available.
 // If there are more than the maximum available pools, the Available pool with
 // with the lowest rune depth is demoted to Staged
-func (pm *PoolMgrVCUR) cyclePools(ctx cosmos.Context, maxAvailablePools, minRunePoolDepth, stagedPoolCost int64, mgr Manager) error {
+func (pm *PoolMgrV121) cyclePools(ctx cosmos.Context, maxAvailablePools, minRunePoolDepth, stagedPoolCost int64, mgr Manager) error {
 	var availblePoolCount int64
 	onDeck := NewPool()        // currently staged pool that could get promoted
 	choppingBlock := NewPool() // currently available pool that is on the chopping block to being demoted
@@ -215,7 +210,7 @@ func (pm *PoolMgrVCUR) cyclePools(ctx cosmos.Context, maxAvailablePools, minRune
 }
 
 // poolMeetTradingVolumeCriteria check if pool generated the minimum amount of fees since last cycle
-func (pm *PoolMgrVCUR) poolMeetTradingVolumeCriteria(ctx cosmos.Context, mgr Manager, pool Pool, minPoolLiquidityFee cosmos.Uint) bool {
+func (pm *PoolMgrV121) poolMeetTradingVolumeCriteria(ctx cosmos.Context, mgr Manager, pool Pool, minPoolLiquidityFee cosmos.Uint) bool {
 	if minPoolLiquidityFee.IsZero() {
 		return true
 	}
@@ -230,7 +225,7 @@ func (pm *PoolMgrVCUR) poolMeetTradingVolumeCriteria(ctx cosmos.Context, mgr Man
 }
 
 // removeAssetFromVault set asset balance to zero for all vaults holding the asset
-func (pm *PoolMgrVCUR) removeAssetFromVault(ctx cosmos.Context, asset common.Asset, mgr Manager) {
+func (pm *PoolMgrV121) removeAssetFromVault(ctx cosmos.Context, asset common.Asset, mgr Manager) {
 	// zero vaults with the pool asset
 	vaultIter := mgr.Keeper().GetVaultIterator(ctx)
 	defer vaultIter.Close()
@@ -255,7 +250,7 @@ func (pm *PoolMgrVCUR) removeAssetFromVault(ctx cosmos.Context, asset common.Ass
 }
 
 // removeLiquidityProviders remove all lps for the given asset pool
-func (pm *PoolMgrVCUR) removeLiquidityProviders(ctx cosmos.Context, asset common.Asset, mgr Manager) {
+func (pm *PoolMgrV121) removeLiquidityProviders(ctx cosmos.Context, asset common.Asset, mgr Manager) {
 	iterator := mgr.Keeper().GetLiquidityProviderIterator(ctx, asset)
 	defer iterator.Close()
 	for ; iterator.Valid(); iterator.Next() {
@@ -290,7 +285,7 @@ func (pm *PoolMgrVCUR) removeLiquidityProviders(ctx cosmos.Context, asset common
 	}
 }
 
-func (pm *PoolMgrVCUR) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) {
+func (pm *PoolMgrV121) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) {
 	if atTVLCap(ctx, nil, mgr) {
 		ctx.Logger().Info("cleaning pending liquidity skipped due to TVL cap")
 		return
@@ -352,135 +347,8 @@ func (pm *PoolMgrVCUR) cleanupPendingLiquidity(ctx cosmos.Context, mgr Manager) 
 	}
 }
 
-func (pm *PoolMgrVCUR) checkSaversUtilization(ctx cosmos.Context, mgr Manager) error {
-	if mgr.Keeper().IsGlobalTradingHalted(ctx) {
-		return nil
-	}
-	saversFreq := mgr.Keeper().GetConfigInt64(ctx, constants.SaversEjectInterval)
-	if saversFreq <= 0 || ctx.BlockHeight()%saversFreq != 0 {
-		return nil
-	}
-
-	nodeAccounts, err := mgr.Keeper().ListActiveValidators(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(nodeAccounts) == 0 {
-		return fmt.Errorf("dev err: no active node accounts")
-	}
-
-	var (
-		synthPool           Pool
-		maxUtilizationRatio = types.ZeroUint()
-		handler             = NewInternalHandler(mgr)
-		signer              = nodeAccounts[0].NodeAddress
-		synthCap            = mgr.Keeper().GetConfigInt64(ctx, constants.MaxSynthPerPoolDepth)
-	)
-	iterator := mgr.Keeper().GetPoolIterator(ctx)
-	defer iterator.Close()
-
-	// Find the pool with the highest utilization ratio above the cap
-	for ; iterator.Valid(); iterator.Next() {
-		var pool Pool
-		err = mgr.Keeper().Cdc().Unmarshal(iterator.Value(), &pool)
-		if err != nil {
-			ctx.Logger().Error("fail to unmarshal pool for synth utilization check", "error", err)
-			continue
-		}
-
-		// skip non synth asset pool
-		if !pool.Asset.IsSyntheticAsset() {
-			continue
-		}
-
-		if !pool.IsAvailable() && !pool.IsStaged() {
-			continue
-		}
-
-		l1Chain := pool.Asset.GetLayer1Asset().GetChain()
-		if mgr.Keeper().IsChainTradingHalted(ctx, l1Chain) || mgr.Keeper().IsLPPaused(ctx, l1Chain) {
-			continue
-		}
-
-		if mgr.Keeper().IsRagnarok(ctx, []common.Asset{pool.Asset.GetLayer1Asset()}) {
-			continue
-		}
-
-		synthSupply := mgr.Keeper().GetTotalSupply(ctx, pool.Asset.GetSyntheticAsset())
-		l1Pool, err := mgr.Keeper().GetPool(ctx, pool.Asset.GetLayer1Asset())
-		if err != nil {
-			continue
-		}
-
-		maxSynth := common.GetUncappedShare(cosmos.NewUint(uint64(synthCap)), cosmos.NewUint(constants.MaxBasisPts), l1Pool.BalanceAsset.MulUint64(2))
-		if synthSupply.GT(maxSynth) {
-			utilizationRatio := common.GetUncappedShare(maxSynth, synthSupply, types.NewUint(constants.MaxBasisPts))
-			if synthPool.IsEmpty() || utilizationRatio.GT(maxUtilizationRatio) {
-				synthPool = pool
-				maxUtilizationRatio = utilizationRatio
-			}
-		}
-	}
-	if synthPool.IsEmpty() {
-		// No pool found with synth utilization above the cap
-		return nil
-	}
-
-	lpIterator := mgr.Keeper().GetLiquidityProviderIterator(ctx, synthPool.Asset)
-	defer lpIterator.Close()
-	var latestLp LiquidityProvider
-	for ; lpIterator.Valid(); lpIterator.Next() {
-		var lp LiquidityProvider
-		if err := mgr.Keeper().Cdc().Unmarshal(lpIterator.Value(), &lp); err != nil {
-			ctx.Logger().Error("fail to unmarshal liquidity provider", "error", err)
-			continue
-		}
-		// get the last added lp
-		if lp.LastAddHeight > latestLp.LastAddHeight {
-			latestLp = lp
-		} else if lp.LastAddHeight == latestLp.LastAddHeight {
-			// withdraw smaller position
-			if lp.Units.LT(latestLp.Units) {
-				latestLp = lp
-			}
-		}
-	}
-
-	// sanity check
-	if latestLp.LastAddHeight == 0 || latestLp.AssetAddress.IsEmpty() {
-		ctx.Logger().Error("saver utilization exceeded without any LP position", "asset", synthPool.Asset)
-		return nil
-	}
-
-	coins := common.NewCoins(common.NewCoin(synthPool.Asset.GetLayer1Asset(), cosmos.ZeroUint())) // used in tx hash
-	tx := common.NewTx(common.BlankTxID, latestLp.AssetAddress, latestLp.AssetAddress, coins, nil, TxWithdraw.String())
-	tx.Chain = synthPool.Asset.GetChain()
-	tx.ID, err = common.NewTxID(tx.Hash(mgr.Keeper().GetVersion(), ctx.BlockHeight()))
-	if err != nil {
-		ctx.Logger().Error("fail to create tx id", "error", err, "tx", tx)
-		return nil
-	}
-
-	withdrawMsg := NewMsgWithdrawLiquidity(
-		tx,
-		latestLp.AssetAddress,
-		cosmos.NewUint(constants.MaxBasisPts),
-		synthPool.Asset.GetSyntheticAsset(),
-		common.EmptyAsset,
-		signer,
-	)
-	ctx.Logger().Info("closing saver LP position", "tx_id", tx.ID, "pool", synthPool.Asset, "units", latestLp.Units, "asset_address", latestLp.AssetAddress)
-	_, err = handler(ctx, withdrawMsg)
-	if err != nil {
-		ctx.Logger().Error("fail to eject saver position", "asset", synthPool.Asset, "address", latestLp.AssetAddress, "error", err)
-	}
-
-	return nil
-}
-
 // commitPendingLiquidity - for aged pending liquidity, commit it to the pool
-func (pm *PoolMgrVCUR) commitPendingLiquidity(ctx cosmos.Context, pool Pool, mgr Manager) error {
+func (pm *PoolMgrV121) commitPendingLiquidity(ctx cosmos.Context, pool Pool, mgr Manager) error {
 	ctx.Logger().Info("cleaning pending liquidity in pool", "pool", pool.Asset)
 	// track stats
 	var count int
