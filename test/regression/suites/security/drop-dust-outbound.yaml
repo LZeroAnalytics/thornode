@@ -1,22 +1,19 @@
 {{ template "default-state.yaml" }}
 ---
-{{ template "btc-eth-pool-state.yaml" }}
----
-type: create-blocks
-count: 1
+{{ template "btc-pool-state-multiple-vaults.yaml" }}
 ---
 type: create-blocks
 count: 1
 ---
 ########################################################################################
-# swap to evm null address
+# swap below dust threshold
 ########################################################################################
 type: tx-deposit
 signer: {{ addr_thor_fox }}
 coins:
-  - amount: "1000000000"
+  - amount: "20000000"
     asset: "rune"
-memo: "=:ETH.ETH:0x0000000000000000000000000000000000000000"
+memo: "=:BTC.BTC:{{ addr_btc_fox }}"
 ---
 type: create-blocks
 count: 1
@@ -40,13 +37,36 @@ asserts:
   - .|length == 0
 ---
 ########################################################################################
-# should emit security event
+# outbound with 2 outputs, 1 below dust threshold
+########################################################################################
+type: tx-deposit
+signer: {{ addr_thor_cat }}
+coins:
+  - amount: "0"
+    asset: "rune"
+memo: "-:BTC.BTC:5001"
+---
+type: create-blocks
+count: 1
+---
+########################################################################################
+# all outbound items should have over dust
 ########################################################################################
 type: check
-endpoint: http://localhost:1317/thorchain/block
+endpoint: http://localhost:1317/thorchain/queue/swap
 asserts:
-  - '[.end_block_events[]|select(.type == "security")]|length == 1'
-  - .end_block_events[]|select(.type == "security")|.msg == "evm outbound to null address"
+  - .|length == 0
+---
+type: check
+endpoint: http://localhost:1317/thorchain/queue/scheduled
+asserts:
+  - .|length == 0
+---
+type: check
+endpoint: http://localhost:1317/thorchain/queue/outbound
+asserts:
+  - .|length == 1
+  - .[0]|.coin.amount|tonumber == 49982000-6500
 ---
 ########################################################################################
 # vault will have more than pool
