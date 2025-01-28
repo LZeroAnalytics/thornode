@@ -3,79 +3,15 @@ package thorchain
 import (
 	"fmt"
 
-	"github.com/blang/semver"
 	tmtypes "github.com/cometbft/cometbft/types"
 	se "github.com/cosmos/cosmos-sdk/types/errors"
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
-	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
-// DepositHandler is to process native messages on THORChain
-type DepositHandler struct {
-	mgr Manager
-}
-
-// NewDepositHandler create a new instance of DepositHandler
-func NewDepositHandler(mgr Manager) DepositHandler {
-	return DepositHandler{
-		mgr: mgr,
-	}
-}
-
-// Run is the main entry of DepositHandler
-func (h DepositHandler) Run(ctx cosmos.Context, m cosmos.Msg) (*cosmos.Result, error) {
-	msg, ok := m.(*MsgDeposit)
-	if !ok {
-		return nil, errInvalidMessage
-	}
-	if err := h.validate(ctx, *msg); err != nil {
-		ctx.Logger().Error("MsgDeposit failed validation", "error", err)
-		return nil, err
-	}
-	result, err := h.handle(ctx, *msg)
-	if err != nil {
-		ctx.Logger().Error("fail to process MsgDeposit", "error", err)
-		return nil, err
-	}
-	return result, nil
-}
-
-func (h DepositHandler) validate(ctx cosmos.Context, msg MsgDeposit) error {
-	version := h.mgr.GetVersion()
-	switch {
-	case version.GTE(semver.MustParse("3.0.0")):
-		return h.validateV3_0_0(ctx, msg)
-	default:
-		return errInvalidVersion
-	}
-}
-
-func (h DepositHandler) validateV3_0_0(ctx cosmos.Context, msg MsgDeposit) error {
-	// ValidateBasic is also executed in message service router's handler and isn't versioned there
-	if err := msg.ValidateBasic(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Result, error) {
-	ctx.Logger().Info("receive MsgDeposit", "from", msg.GetSigners()[0], "coins", msg.Coins, "memo", msg.Memo)
-	version := h.mgr.GetVersion()
-	switch {
-	case version.GTE(semver.MustParse("3.2.0")):
-		return h.handleV3_2_0(ctx, msg)
-	case version.GTE(semver.MustParse("3.0.0")):
-		return h.handleV3_0_0(ctx, msg)
-	default:
-		return nil, errInvalidVersion
-	}
-}
-
-func (h DepositHandler) handleV3_2_0(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Result, error) {
+func (h DepositHandler) handleV3_0_0(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Result, error) {
 	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgDeposit while THORChain is halted")
 	}
@@ -141,15 +77,6 @@ func (h DepositHandler) handleV3_2_0(ctx cosmos.Context, msg MsgDeposit) (*cosmo
 	default:
 		targetModule = AsgardName
 	}
-
-	// Only permit coin types other than RUNE to be sent to network modules when explicitly allowed.
-	// (When the Amount is zero, the Asset type is irrelevant.)
-	// Coins having exactly one Coin is ensured by the validate function,
-	// but IsEmpty covers a hypothetical no-Coin scenario too.
-	if !msg.Coins.IsEmpty() && !msg.Coins[0].Asset.IsRune() && targetModule != AsgardName {
-		return nil, fmt.Errorf("(%s) memos are for the (%s) module, for which messages must only contain RUNE", memo.GetType().String(), targetModule)
-	}
-
 	coinsInMsg := msg.Coins
 	if !coinsInMsg.IsEmpty() && !coinsInMsg[0].Asset.IsTradeAsset() && !coinsInMsg[0].Asset.IsSecuredAsset() {
 		// send funds to target module
@@ -226,50 +153,4 @@ func (h DepositHandler) handleV3_2_0(ctx cosmos.Context, msg MsgDeposit) (*cosmo
 		h.mgr.Keeper().SetObservedTxInVoter(ctx, voter)
 	}
 	return result, nil
-}
-
-func (h DepositHandler) addSwap(ctx cosmos.Context, msg MsgSwap) {
-	if h.mgr.Keeper().OrderBooksEnabled(ctx) {
-		source := msg.Tx.Coins[0]
-		target := common.NewCoin(msg.TargetAsset, msg.TradeTarget)
-		evt := NewEventLimitOrder(source, target, msg.Tx.ID)
-		if err := h.mgr.EventMgr().EmitEvent(ctx, evt); err != nil {
-			ctx.Logger().Error("fail to emit limit order event", "error", err)
-		}
-		if err := h.mgr.Keeper().SetOrderBookItem(ctx, msg); err != nil {
-			ctx.Logger().Error("fail to add swap to queue", "error", err)
-		}
-	} else {
-		h.addSwapDirect(ctx, msg)
-	}
-}
-
-// addSwapDirect adds the swap directly to the swap queue (no order book) - segmented
-// out into its own function to allow easier maintenance of original behavior vs order
-// book behavior.
-func (h DepositHandler) addSwapDirect(ctx cosmos.Context, msg MsgSwap) {
-	version := h.mgr.GetVersion()
-	switch {
-	case version.GTE(semver.MustParse("3.0.0")):
-		h.addSwapDirectV3_0_0(ctx, msg)
-	default:
-		ctx.Logger().Error(errInvalidVersion.Error())
-	}
-}
-
-func (h DepositHandler) addSwapDirectV3_0_0(ctx cosmos.Context, msg MsgSwap) {
-	if msg.Tx.Coins.IsEmpty() {
-		return
-	}
-	// Queue the main swap
-	if err := h.mgr.Keeper().SetSwapQueueItem(ctx, msg, 0); err != nil {
-		ctx.Logger().Error("fail to add swap to queue", "error", err)
-	}
-}
-
-// DepositAnteHandler called by the ante handler to gate mempool entry
-// and also during deliver. Store changes will persist if this function
-// succeeds, regardless of the success of the transaction.
-func DepositAnteHandler(ctx cosmos.Context, v semver.Version, k keeper.Keeper, msg MsgDeposit) error {
-	return k.DeductNativeTxFeeFromAccount(ctx, msg.GetSigners()[0])
 }
