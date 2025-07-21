@@ -79,20 +79,20 @@ func (c *lruCache) Set(key []byte, value []byte) {
 	c.cache.Add(string(key), entry)
 }
 
-func (c *lruCache) Has(key []byte) bool {
+func (c *lruCache) Has(key []byte) (bool, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	
 	entry, ok := c.cache.Peek(string(key))
 	if !ok {
-		return false
+		return false, nil
 	}
 	
 	if c.ttl > 0 && time.Since(entry.Timestamp) > c.ttl {
-		return false
+		return false, nil
 	}
 	
-	return true
+	return true, nil
 }
 
 func (c *lruCache) Delete(key []byte) {

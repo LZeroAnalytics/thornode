@@ -70,8 +70,8 @@ type ForkingKVStore interface {
 	Has(key []byte) (bool, error)
 	Set(key, value []byte) error
 	Delete(key []byte) error
-	Iterator(start, end []byte) storetypes.Iterator
-	ReverseIterator(start, end []byte) storetypes.Iterator
+	Iterator(start, end []byte) (storetypes.Iterator, error)
+	ReverseIterator(start, end []byte) (storetypes.Iterator, error)
 	GetStats() ForkingStats
 }
 
