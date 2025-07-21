@@ -93,9 +93,12 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	return value, nil
 }
 
-func (f *forkingKVStore) Has(key []byte) bool {
+func (f *forkingKVStore) Has(key []byte) (bool, error) {
 	value, err := f.Get(key)
-	return err == nil && value != nil
+	if err != nil {
+		return false, err
+	}
+	return value != nil, nil
 }
 
 func (f *forkingKVStore) Set(key []byte, value []byte) error {
