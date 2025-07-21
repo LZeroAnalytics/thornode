@@ -346,7 +346,7 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 	)
 
-	var thorchainStoreService corestore.KVStoreService
+	var thorchainStoreService storetypes.KVStoreService
 	forkingRPC := cast.ToString(appOpts.Get("fork.rpc"))
 	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
 	forkingEnabled := forkingRPC != "" && forkingChainID != ""
