@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -77,6 +78,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/openapi"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	thorchainkeeper "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	thorchainkeeperabci "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/abci"
 	thorchainkeeperv1 "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/v1"
@@ -344,8 +346,64 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 	)
 
+	var thorchainStoreService storetypes.KVStoreService
+	forkingRPC := cast.ToString(appOpts.Get("fork.rpc"))
+	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
+	forkingEnabled := forkingRPC != "" && forkingChainID != ""
+	
+	if forkingEnabled {
+		forkingConfig := forking.RemoteConfig{
+			RPC:             forkingRPC,
+			ChainID:         forkingChainID,
+			TrustHeight:     cast.ToInt64(appOpts.Get("fork.trust-height")),
+			TrustHash:       cast.ToString(appOpts.Get("fork.trust-hash")),
+			TrustingPeriod:  cast.ToDuration(appOpts.Get("fork.trusting-period")),
+			MaxClockDrift:   cast.ToDuration(appOpts.Get("fork.max-clock-drift")),
+			Timeout:         cast.ToDuration(appOpts.Get("fork.timeout")),
+			CacheEnabled:    cast.ToBool(appOpts.Get("fork.cache-enabled")),
+			CacheSize:       cast.ToInt(appOpts.Get("fork.cache-size")),
+			GasCostPerFetch: cast.ToUint64(appOpts.Get("fork.gas-cost-per-fetch")),
+		}
+		
+		if forkingConfig.TrustingPeriod == 0 {
+			forkingConfig.TrustingPeriod = 24 * time.Hour
+		}
+		if forkingConfig.MaxClockDrift == 0 {
+			forkingConfig.MaxClockDrift = 10 * time.Second
+		}
+		if forkingConfig.Timeout == 0 {
+			forkingConfig.Timeout = 30 * time.Second
+		}
+		if forkingConfig.CacheSize == 0 {
+			forkingConfig.CacheSize = 10000
+		}
+		if forkingConfig.GasCostPerFetch == 0 {
+			forkingConfig.GasCostPerFetch = 1000
+		}
+		
+		remoteClient, err := forking.NewRemoteClient(forkingConfig, app.appCodec)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create forking remote client: %s", err))
+		}
+		
+		cache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute) // 5 minute TTL
+		if err != nil {
+			panic(fmt.Sprintf("failed to create forking cache: %s", err))
+		}
+		
+		thorchainStoreService = forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]),
+			remoteClient,
+			cache,
+			forkingConfig,
+			thorchaintypes.StoreKey.Name(),
+		)
+	} else {
+		thorchainStoreService = runtime.NewKVStoreService(keys[thorchaintypes.StoreKey])
+	}
+
 	app.ThorchainKeeper = thorchainkeeperv1.NewKeeper(
-		app.appCodec, runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]), app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper,
+		app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper,
 	)
 
 	wasmDir := filepath.Join(homePath, "data") // "wasm" subdirectory created here
@@ -396,7 +454,7 @@ func NewChainApp(
 	telemetryEnabled := cast.ToBool(appOpts.Get("telemetry.enabled"))
 	testApp := cast.ToBool(appOpts.Get(TestApp))
 
-	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]), app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
+	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
