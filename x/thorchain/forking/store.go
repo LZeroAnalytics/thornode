@@ -36,20 +36,20 @@ func NewForkingKVStore(
 	}
 }
 
-func (f *forkingKVStore) Get(key []byte) []byte {
+func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	if value, err := f.parent.Get(key); err == nil && value != nil {
-		return value
+		return value, nil
 	}
 	
 	if f.config.CacheEnabled {
 		if cached := f.cache.Get(key); cached != nil {
 			f.service.updateStats(false, true, 0, false)
-			return cached
+			return cached, nil
 		}
 	}
 	
 	if f.remoteClient == nil {
-		return nil
+		return nil, nil
 	}
 	
 	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
@@ -63,8 +63,8 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 			if f.gasMeter != nil {
 				f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
 			}
-			f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
-			return nil
+		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
+		return nil, err
 		}
 	}
 	
@@ -74,7 +74,7 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
 		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
-		return nil
+		return nil, err
 	}
 	
 	if f.config.CacheEnabled && value != nil {
@@ -90,18 +90,22 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 	}
 	f.service.updateStats(true, false, f.config.GasCostPerFetch, false)
 	
-	return value
+	return value, nil
 }
 
 func (f *forkingKVStore) Has(key []byte) bool {
-	return f.Get(key) != nil
+	value, err := f.Get(key)
+	return err == nil && value != nil
 }
 
-func (f *forkingKVStore) Set(key []byte, value []byte) {
-	f.parent.Set(key, value)
+func (f *forkingKVStore) Set(key []byte, value []byte) error {
+	if err := f.parent.Set(key, value); err != nil {
+		return err
+	}
 	if f.config.CacheEnabled {
 		f.cache.Set(key, value)
 	}
+	return nil
 }
 
 func (f *forkingKVStore) Delete(key []byte) error {

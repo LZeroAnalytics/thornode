@@ -12,6 +12,7 @@ import (
 	"github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/types"
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 )
 
 type remoteClient struct {
@@ -99,7 +100,7 @@ func (c *remoteClient) GetLatestHeight(ctx context.Context) (int64, error) {
 	return result.SyncInfo.LatestBlockHeight, nil
 }
 
-func (c *remoteClient) verifyProof(proofOps *abci.ProofOps, storeKey string, key, value []byte, height int64) error {
+func (c *remoteClient) verifyProof(proofOps *cmtproto.ProofOps, storeKey string, key, value []byte, height int64) error {
 	if proofOps == nil {
 		return fmt.Errorf("no proof provided")
 	}
