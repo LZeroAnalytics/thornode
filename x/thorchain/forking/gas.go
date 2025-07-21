@@ -1,14 +1,14 @@
 package forking
 
 import (
-	sdk "github.com/cosmos/cosmos-sdk/types"
+	storetypes "cosmossdk.io/store/types"
 )
 
 type SDKGasMeter struct {
-	gasMeter sdk.GasMeter
+	gasMeter storetypes.GasMeter
 }
 
-func NewSDKGasMeter(gasMeter sdk.GasMeter) GasMeter {
+func NewSDKGasMeter(gasMeter storetypes.GasMeter) GasMeter {
 	if gasMeter == nil {
 		return nil
 	}
