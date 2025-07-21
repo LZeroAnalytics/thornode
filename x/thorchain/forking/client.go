@@ -1,6 +1,7 @@
 package forking
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -148,7 +149,7 @@ func (c *remoteClient) verifyHeaderChain(header *types.Header, targetHeight int6
 	}
 	
 	if targetHeight == c.trustedHeight {
-		if !header.Hash().Equal(c.trustedHash) {
+		if !bytes.Equal(header.Hash(), c.trustedHash) {
 			return fmt.Errorf("header hash mismatch at trusted height")
 		}
 		return nil

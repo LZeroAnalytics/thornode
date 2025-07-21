@@ -2,10 +2,8 @@ package forking
 
 import (
 	"context"
-	"fmt"
 
 	storetypes "cosmossdk.io/core/store"
-	"github.com/cosmos/cosmos-sdk/types"
 )
 
 type forkingKVStore struct {
@@ -39,7 +37,7 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) Get(key []byte) []byte {
-	if value := f.parent.Get(key); value != nil {
+	if value, err := f.parent.Get(key); err == nil && value != nil {
 		return value
 	}
 	
@@ -106,19 +104,24 @@ func (f *forkingKVStore) Set(key []byte, value []byte) {
 	}
 }
 
-func (f *forkingKVStore) Delete(key []byte) {
-	f.parent.Delete(key)
+func (f *forkingKVStore) Delete(key []byte) error {
+	if err := f.parent.Delete(key); err != nil {
+		return err
+	}
 	if f.config.CacheEnabled {
 		f.cache.Delete(key)
 	}
+	return nil
 }
 
 func (f *forkingKVStore) Iterator(start, end []byte) storetypes.Iterator {
-	return f.parent.Iterator(start, end)
+	iter, _ := f.parent.Iterator(start, end)
+	return iter
 }
 
 func (f *forkingKVStore) ReverseIterator(start, end []byte) storetypes.Iterator {
-	return f.parent.ReverseIterator(start, end)
+	iter, _ := f.parent.ReverseIterator(start, end)
+	return iter
 }
 
 func (f *forkingKVStore) GetStats() ForkingStats {
