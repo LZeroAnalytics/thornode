@@ -10,6 +10,7 @@ import (
 type RemoteConfig struct {
 	RPC string
 	ChainID string
+	ForkHeight int64
 	TrustHeight int64
 	TrustHash string
 	TrustingPeriod time.Duration
@@ -24,6 +25,7 @@ func DefaultRemoteConfig() RemoteConfig {
 	return RemoteConfig{
 		RPC:            "https://thornode.ninerealms.com:26657",
 		ChainID:        "thorchain-mainnet-v1",
+		ForkHeight:     0, // 0 = latest (default)
 		TrustHeight:    0, // Will be set dynamically
 		TrustHash:      "", // Will be set dynamically
 		TrustingPeriod: 24 * time.Hour,

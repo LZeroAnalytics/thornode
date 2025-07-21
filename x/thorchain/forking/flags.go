@@ -9,6 +9,7 @@ import (
 const (
 	FlagForkRPC            = "fork.rpc"
 	FlagForkChainID        = "fork.chain-id"
+	FlagForkHeight         = "fork.height"
 	FlagForkTrustHeight    = "fork.trust-height"
 	FlagForkTrustHash      = "fork.trust-hash"
 	FlagForkTrustingPeriod = "fork.trusting-period"
@@ -22,6 +23,7 @@ const (
 func AddModuleInitFlags(startCmd *cobra.Command) {
 	startCmd.Flags().String(FlagForkRPC, "", "Remote RPC endpoint for forking (e.g., https://thornode.ninerealms.com:26657)")
 	startCmd.Flags().String(FlagForkChainID, "", "Chain ID of the remote chain to fork from (e.g., thorchain-mainnet-v1)")
+	startCmd.Flags().Int64(FlagForkHeight, 0, "Block height to fork from (0 = latest block)")
 	startCmd.Flags().Int64(FlagForkTrustHeight, 0, "Trusted block height for light client verification (0 = auto-detect)")
 	startCmd.Flags().String(FlagForkTrustHash, "", "Trusted block hash for light client verification (empty = auto-detect)")
 	startCmd.Flags().Duration(FlagForkTrustingPeriod, 24*time.Hour, "Trusting period for light client verification")
