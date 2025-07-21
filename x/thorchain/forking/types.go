@@ -66,7 +66,12 @@ type ForkingStats struct {
 }
 
 type ForkingKVStore interface {
-	storetypes.KVStore
+	Get(key []byte) ([]byte, error)
+	Has(key []byte) bool
+	Set(key, value []byte) error
+	Delete(key []byte) error
+	Iterator(start, end []byte) storetypes.Iterator
+	ReverseIterator(start, end []byte) storetypes.Iterator
 	GetStats() ForkingStats
 }
 
