@@ -57,10 +57,10 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
 	defer cancel()
 	
-	height := f.service.GetRemoteHeight()
+	height := f.service.GetPinnedHeight()
 	if height == 0 {
 		var err error
-	height, err = f.remoteClient.GetLatestHeight(ctx)
+		height, err = f.remoteClient.GetLatestHeight(ctx)
 		if err != nil {
 			if f.gasMeter != nil {
 				f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")

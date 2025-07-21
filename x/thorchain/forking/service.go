@@ -2,6 +2,7 @@ package forking
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	storetypes "cosmossdk.io/core/store"
@@ -17,6 +18,8 @@ type forkingKVStoreService struct {
 	
 	mu           sync.RWMutex
 	remoteHeight int64
+	pinnedHeight int64
+	blockActive  bool
 	
 	stats ForkingStats
 }
@@ -35,6 +38,8 @@ func NewForkingKVStoreService(
 		config:       config,
 		storeKey:     storeKey,
 		remoteHeight: 0,
+		pinnedHeight: 0,
+		blockActive:  false,
 		stats:        ForkingStats{},
 	}
 }
@@ -66,6 +71,52 @@ func (f *forkingKVStoreService) GetStats() ForkingStats {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.stats
+}
+
+func (f *forkingKVStoreService) BeginBlock(height int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	
+	if f.remoteClient == nil {
+		return nil
+	}
+	
+	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
+	defer cancel()
+	
+	remoteHeight, err := f.remoteClient.GetLatestHeight(ctx)
+	if err != nil {
+		if f.remoteHeight > 0 {
+			f.pinnedHeight = f.remoteHeight
+		} else {
+			return fmt.Errorf("failed to get remote height and no previous height available: %w", err)
+		}
+	} else {
+		f.pinnedHeight = remoteHeight
+		f.remoteHeight = remoteHeight
+	}
+	
+	f.blockActive = true
+	return nil
+}
+
+func (f *forkingKVStoreService) EndBlock() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	
+	f.blockActive = false
+	f.pinnedHeight = 0
+	return nil
+}
+
+func (f *forkingKVStoreService) GetPinnedHeight() int64 {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	
+	if f.blockActive && f.pinnedHeight > 0 {
+		return f.pinnedHeight
+	}
+	return f.remoteHeight
 }
 
 func (f *forkingKVStoreService) updateStats(remoteFetch bool, cacheHit bool, gasUsed uint64, proofFailed bool) {

@@ -56,6 +56,8 @@ type ForkingKVStoreService interface {
 	SetRemoteHeight(height int64)
 	GetRemoteHeight() int64
 	GetStats() ForkingStats
+	BeginBlock(height int64) error
+	EndBlock() error
 }
 
 type ForkingStats struct {
