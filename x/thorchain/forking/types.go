@@ -44,7 +44,7 @@ type RemoteClient interface {
 type Cache interface {
 	Get(key []byte) []byte
 	Set(key []byte, value []byte)
-	Has(key []byte) bool
+	Has(key []byte) (bool, error)
 	Delete(key []byte)
 	Clear()
 }
@@ -67,7 +67,7 @@ type ForkingStats struct {
 
 type ForkingKVStore interface {
 	Get(key []byte) ([]byte, error)
-	Has(key []byte) bool
+	Has(key []byte) (bool, error)
 	Set(key, value []byte) error
 	Delete(key []byte) error
 	Iterator(start, end []byte) storetypes.Iterator
