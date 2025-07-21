@@ -121,14 +121,12 @@ func (f *forkingKVStore) Delete(key []byte) error {
 	return nil
 }
 
-func (f *forkingKVStore) Iterator(start, end []byte) storetypes.Iterator {
-	iter, _ := f.parent.Iterator(start, end)
-	return iter
+func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error) {
+	return f.parent.Iterator(start, end)
 }
 
-func (f *forkingKVStore) ReverseIterator(start, end []byte) storetypes.Iterator {
-	iter, _ := f.parent.ReverseIterator(start, end)
-	return iter
+func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator, error) {
+	return f.parent.ReverseIterator(start, end)
 }
 
 func (f *forkingKVStore) GetStats() ForkingStats {
