@@ -6,16 +6,14 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/store/rootmulti"
-	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	"github.com/cosmos/ics23/go"
-	tmclient "github.com/tendermint/tendermint/rpc/client"
-	tmhttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/types"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	"github.com/cometbft/cometbft/rpc/client"
+	"github.com/cometbft/cometbft/types"
 )
 
 type remoteClient struct {
-	rpcClient tmclient.Client
+	rpcClient client.Client
 	config    RemoteConfig
 	codec     codec.Codec
 	
@@ -24,7 +22,7 @@ type remoteClient struct {
 }
 
 func NewRemoteClient(config RemoteConfig, codec codec.Codec) (RemoteClient, error) {
-	rpcClient, err := tmhttp.New(config.RPC, "/websocket")
+	rpcClient, err := rpchttp.New(config.RPC, "/websocket")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RPC client: %w", err)
 	}
@@ -66,7 +64,7 @@ func (c *remoteClient) initializeTrustedState() error {
 func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []byte, height int64) ([]byte, error) {
 	path := fmt.Sprintf("store/%s/key", storeKey)
 	
-	result, err := c.rpcClient.ABCIQueryWithOptions(ctx, path, key, tmclient.ABCIQueryOptions{
+	result, err := c.rpcClient.ABCIQueryWithOptions(ctx, path, key, client.ABCIQueryOptions{
 		Height: height,
 		Prove:  true,
 	})
