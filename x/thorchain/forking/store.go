@@ -15,6 +15,7 @@ type forkingKVStore struct {
 	config       RemoteConfig
 	storeKey     string
 	service      *forkingKVStoreService
+	gasMeter     GasMeter
 }
 
 func NewForkingKVStore(
@@ -24,6 +25,7 @@ func NewForkingKVStore(
 	config RemoteConfig,
 	storeKey string,
 	service *forkingKVStoreService,
+	gasMeter GasMeter,
 ) ForkingKVStore {
 	return &forkingKVStore{
 		parent:       parent,
@@ -32,6 +34,7 @@ func NewForkingKVStore(
 		config:       config,
 		storeKey:     storeKey,
 		service:      service,
+		gasMeter:     gasMeter,
 	}
 }
 
@@ -57,8 +60,11 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 	height := f.service.GetRemoteHeight()
 	if height == 0 {
 		var err error
-		height, err = f.remoteClient.GetLatestHeight(ctx)
+	height, err = f.remoteClient.GetLatestHeight(ctx)
 		if err != nil {
+			if f.gasMeter != nil {
+				f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
+			}
 			f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
 			return nil
 		}
@@ -66,6 +72,9 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 	
 	value, err := f.remoteClient.GetWithProof(ctx, f.storeKey, key, height)
 	if err != nil {
+		if f.gasMeter != nil {
+			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
+		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
 		return nil
 	}
@@ -78,6 +87,9 @@ func (f *forkingKVStore) Get(key []byte) []byte {
 		f.parent.Set(key, value)
 	}
 	
+	if f.gasMeter != nil {
+		f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_success")
+	}
 	f.service.updateStats(true, false, f.config.GasCostPerFetch, false)
 	
 	return value

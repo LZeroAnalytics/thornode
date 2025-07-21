@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	storetypes "cosmossdk.io/core/store"
-	"github.com/cosmos/cosmos-sdk/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 type forkingKVStoreService struct {
@@ -41,7 +41,13 @@ func NewForkingKVStoreService(
 
 func (f *forkingKVStoreService) OpenKVStore(ctx context.Context) storetypes.KVStore {
 	parentStore := f.parent.OpenKVStore(ctx)
-	return NewForkingKVStore(parentStore, f.remoteClient, f.cache, f.config, f.storeKey, f)
+	
+	var gasMeter GasMeter
+	if sdkCtx, ok := ctx.(sdk.Context); ok {
+		gasMeter = NewSDKGasMeter(sdkCtx.GasMeter())
+	}
+	
+	return NewForkingKVStore(parentStore, f.remoteClient, f.cache, f.config, f.storeKey, f, gasMeter)
 }
 
 func (f *forkingKVStoreService) SetRemoteHeight(height int64) {
