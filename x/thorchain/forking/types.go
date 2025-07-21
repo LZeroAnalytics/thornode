@@ -69,3 +69,8 @@ type ForkingKVStore interface {
 	storetypes.KVStore
 	GetStats() ForkingStats
 }
+
+type GasMeter interface {
+	ConsumeGas(amount uint64, descriptor string)
+	GasConsumed() uint64
+}
