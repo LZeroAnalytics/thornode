@@ -48,7 +48,7 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 		}
 	}
 	
-	if f.remoteClient == nil {
+	if f.service.IsGenesisMode() || f.remoteClient == nil {
 		return nil, nil
 	}
 	
