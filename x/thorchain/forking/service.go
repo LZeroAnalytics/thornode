@@ -20,6 +20,7 @@ type forkingKVStoreService struct {
 	remoteHeight int64
 	pinnedHeight int64
 	blockActive  bool
+	genesisMode  bool
 	
 	stats ForkingStats
 }
@@ -40,6 +41,7 @@ func NewForkingKVStoreService(
 		remoteHeight: 0,
 		pinnedHeight: 0,
 		blockActive:  false,
+		genesisMode:  true,
 		stats:        ForkingStats{},
 	}
 }
@@ -76,6 +78,10 @@ func (f *forkingKVStoreService) GetStats() ForkingStats {
 func (f *forkingKVStoreService) BeginBlock(height int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	
+	if height > 1 {
+		f.genesisMode = false
+	}
 	
 	if f.remoteClient == nil {
 		return nil
@@ -126,6 +132,12 @@ func (f *forkingKVStoreService) GetPinnedHeight() int64 {
 		return f.pinnedHeight
 	}
 	return f.remoteHeight
+}
+
+func (f *forkingKVStoreService) IsGenesisMode() bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.genesisMode
 }
 
 func (f *forkingKVStoreService) updateStats(remoteFetch bool, cacheHit bool, gasUsed uint64, proofFailed bool) {
