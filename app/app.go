@@ -18,6 +18,7 @@ import (
 	reflectionv1 "cosmossdk.io/api/cosmos/reflection/v1"
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/core/appmodule"
+	corestore "cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	"cosmossdk.io/x/upgrade"
@@ -346,7 +347,7 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 	)
 
-	var thorchainStoreService storetypes.KVStoreService
+	var thorchainStoreService corestore.KVStoreService
 	forkingRPC := cast.ToString(appOpts.Get("fork.rpc"))
 	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
 	forkingEnabled := forkingRPC != "" && forkingChainID != ""
