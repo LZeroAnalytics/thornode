@@ -5,8 +5,6 @@ import (
 	"time"
 
 	storetypes "cosmossdk.io/core/store"
-	"github.com/cosmos/cosmos-sdk/types"
-	"github.com/cometbft/cometbft/rpc/client"
 )
 
 type RemoteConfig struct {
