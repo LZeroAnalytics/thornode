@@ -84,17 +84,26 @@ func (f *forkingKVStoreService) BeginBlock(height int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
 	defer cancel()
 	
-	remoteHeight, err := f.remoteClient.GetLatestHeight(ctx)
-	if err != nil {
-		if f.remoteHeight > 0 {
-			f.pinnedHeight = f.remoteHeight
-		} else {
-			return fmt.Errorf("failed to get remote height and no previous height available: %w", err)
-		}
+	var remoteHeight int64
+	var err error
+	
+	if f.config.ForkHeight > 0 {
+		remoteHeight = f.config.ForkHeight
 	} else {
-		f.pinnedHeight = remoteHeight
-		f.remoteHeight = remoteHeight
+		remoteHeight, err = f.remoteClient.GetLatestHeight(ctx)
+		if err != nil {
+			if f.remoteHeight > 0 {
+				f.pinnedHeight = f.remoteHeight
+			} else {
+				return fmt.Errorf("failed to get remote height and no previous height available: %w", err)
+			}
+			f.blockActive = true
+			return nil
+		}
 	}
+	
+	f.pinnedHeight = remoteHeight
+	f.remoteHeight = remoteHeight
 	
 	f.blockActive = true
 	return nil
