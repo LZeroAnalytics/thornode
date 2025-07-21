@@ -6,7 +6,7 @@ import (
 
 	storetypes "cosmossdk.io/core/store"
 	"github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/rpc/client"
+	"github.com/cometbft/cometbft/rpc/client"
 )
 
 type RemoteConfig struct {
