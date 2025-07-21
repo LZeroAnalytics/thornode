@@ -10,6 +10,7 @@ import (
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/types"
+	abci "github.com/cometbft/cometbft/abci/types"
 )
 
 type remoteClient struct {
@@ -97,7 +98,7 @@ func (c *remoteClient) GetLatestHeight(ctx context.Context) (int64, error) {
 	return result.SyncInfo.LatestBlockHeight, nil
 }
 
-func (c *remoteClient) verifyProof(proofOps *types.ProofOps, storeKey string, key, value []byte, height int64) error {
+func (c *remoteClient) verifyProof(proofOps *abci.ProofOps, storeKey string, key, value []byte, height int64) error {
 	if proofOps == nil {
 		return fmt.Errorf("no proof provided")
 	}
@@ -110,7 +111,7 @@ func (c *remoteClient) verifyProof(proofOps *types.ProofOps, storeKey string, ke
 		return fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
 	
-	if err := c.verifyHeaderChain(result.Block.Header, height); err != nil {
+	if err := c.verifyHeaderChain(&result.Block.Header, height); err != nil {
 		return fmt.Errorf("header verification failed: %w", err)
 	}
 	
@@ -127,14 +128,12 @@ func (c *remoteClient) verifyProof(proofOps *types.ProofOps, storeKey string, ke
 	spec := ics23.IavlSpec
 	
 	if len(value) > 0 {
-		err = ics23.VerifyMembership(spec, root, ics23Proofs, key, value)
-		if err != nil {
-			return fmt.Errorf("membership verification failed: %w", err)
+		if !ics23.VerifyMembership(spec, []byte(root), ics23Proofs[0], key, value) {
+			return fmt.Errorf("membership verification failed")
 		}
 	} else {
-		err = ics23.VerifyNonMembership(spec, root, ics23Proofs, key)
-		if err != nil {
-			return fmt.Errorf("non-membership verification failed: %w", err)
+		if !ics23.VerifyNonMembership(spec, []byte(root), ics23Proofs[0], key) {
+			return fmt.Errorf("non-membership verification failed")
 		}
 	}
 	

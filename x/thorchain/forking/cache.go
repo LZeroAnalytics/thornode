@@ -139,6 +139,6 @@ func (c *lruCache) GetStats() CacheStats {
 	
 	return CacheStats{
 		Size:     c.cache.Len(),
-		Capacity: c.cache.Cap(),
+		Capacity: 0, // LRU cache doesn't expose capacity in this version
 	}
 }
