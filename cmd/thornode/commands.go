@@ -53,6 +53,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/client/cli"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 
 	"github.com/CosmWasm/wasmd/x/wasm"
 	wasmcli "github.com/CosmWasm/wasmd/x/wasm/client/cli"
@@ -172,6 +173,7 @@ func addModuleInitFlags(startCmd *cobra.Command) {
 	}
 	wasm.AddModuleInitFlags(startCmd)
 	ebifrost.AddModuleInitFlags(startCmd)
+	forking.AddModuleInitFlags(startCmd)
 }
 
 func renderConfigCommand() *cobra.Command {
