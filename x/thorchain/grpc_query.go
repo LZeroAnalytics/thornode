@@ -34,7 +34,6 @@ func (s *queryServer) unwrapSdkContext(c context.Context) sdk.Context {
 	initManager(ctx, s.mgr) // NOOP except regtest
 	s.regInit = true
 	
-	ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
 	return ctx
 }
 
