@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"gitlab.com/thorchain/thornode/v3/constants"
 	"time"
 
 	storetypes "cosmossdk.io/core/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"gitlab.com/thorchain/thornode/v3/constants"
 )
 
 type forkingKVStore struct {
@@ -50,21 +50,24 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	}
 
 	if f.remoteClient == nil {
-		return false
-	}
-
-	if f.service.IsBlockProcessing() {
+		fmt.Printf("[forking] remote client is nil\n")
 		return false
 	}
 
 	if f.sdkCtx != nil {
 		if userAPICall, ok := f.sdkCtx.Context().Value(constants.CtxUserAPICall).(bool); ok && userAPICall {
+			fmt.Printf("[forking] user API call detected\n")
 			return true
 		}
 
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
+			fmt.Printf("[forking] checking tx\n")
 			return false
 		}
+	}
+
+	if f.service.IsBlockProcessing() {
+		return false
 	}
 
 	return true
@@ -101,7 +104,7 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	startTime := time.Now()
 	v, err := f.remoteClient.GetWithProof(ctx, f.storeKey, key, height)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		fmt.Printf("[forking][GET] remote-error store=%s key=%s height=%d duration=%v err=%v\n", f.storeKey, hex.EncodeToString(key), height, duration, err)
 		if f.gasMeter != nil && f.config.GasCostPerFetch > 0 {
@@ -206,19 +209,19 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 	}
 
 	fmt.Printf("[forking][RANGE] remote-fetch store=%s start=%s end=%s height=%d\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end), height)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
 	defer cancel()
 
 	startTime := time.Now()
 	items, err := f.remoteClient.GetRange(ctx, f.storeKey, start, end, height)
 	duration := time.Since(startTime)
-	
+
 	if err != nil {
 		fmt.Printf("[forking][RANGE] remote-error store=%s start=%s end=%s height=%d duration=%v err=%v\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end), height, duration, err)
 		return &EmptyIterator{}, err
 	}
-	
+
 	fmt.Printf("[forking][RANGE] remote-success store=%s start=%s end=%s height=%d duration=%v items=%d\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end), height, duration, len(items))
 
 	if f.config.CacheEnabled {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 
 	storepb "cosmossdk.io/api/cosmos/store/v1beta1"
 	tmclient "github.com/cometbft/cometbft/rpc/client"
@@ -84,23 +83,73 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 }
 
 func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
-	out := make([]*storepb.StoreKVPair, 0, 64)
-	for len(b) > 0 {
-		// Each msg is length-delimited: varint len | msg bytes
-		msgLen, n := protowire.ConsumeVarint(b)
-		if n < 0 || uint64(len(b[n:])) < msgLen {
-			return nil, fmt.Errorf("malformed length-delimited stream")
-		}
-		chunk := b[n : n+int(msgLen)]
-		b = b[n+int(msgLen):]
+	pairs := make([]*storepb.StoreKVPair, 0, 64)
 
-		var kv storepb.StoreKVPair
-		if err := proto.Unmarshal(chunk, &kv); err != nil {
-			return nil, err
+	for len(b) > 0 {
+		// Outer: tag=1, wire=bytes (length-delimited message)
+		fieldNum, wireType, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return nil, fmt.Errorf("consume outer tag failed: %d", n)
 		}
-		out = append(out, &kv)
+		if fieldNum != 1 || wireType != protowire.BytesType {
+			return nil, fmt.Errorf("unexpected outer field: num=%d wt=%d", fieldNum, wireType)
+		}
+
+		msgBytes, m := protowire.ConsumeBytes(b[n:])
+		if m < 0 {
+			return nil, fmt.Errorf("consume outer bytes failed")
+		}
+
+		kv := &storepb.StoreKVPair{}
+		// Parse inner message manually to avoid proto version mismatches (wireType errors)
+		for len(msgBytes) > 0 {
+			inNum, _, inN := protowire.ConsumeTag(msgBytes)
+			if inN < 0 {
+				return nil, fmt.Errorf("consume inner tag failed: %d", inN)
+			}
+			switch inNum {
+			case 1: // key (bytes)
+				bb, l := protowire.ConsumeBytes(msgBytes[inN:])
+				if l < 0 {
+					return nil, fmt.Errorf("consume key failed")
+				}
+				kv.Key = append([]byte(nil), bb...)
+				msgBytes = msgBytes[inN+l:]
+			case 2: // value (bytes)
+				vb, l := protowire.ConsumeBytes(msgBytes[inN:])
+				if l < 0 {
+					return nil, fmt.Errorf("consume value failed")
+				}
+				kv.Value = append([]byte(nil), vb...)
+				msgBytes = msgBytes[inN+l:]
+			case 3: // store_key (string)
+				s, l := protowire.ConsumeString(msgBytes[inN:])
+				if l < 0 {
+					return nil, fmt.Errorf("consume store_key failed")
+				}
+				kv.StoreKey = s
+				msgBytes = msgBytes[inN+l:]
+			case 4: // delete (varint -> bool)
+				v, l := protowire.ConsumeVarint(msgBytes[inN:])
+				if l < 0 {
+					return nil, fmt.Errorf("consume delete failed")
+				}
+				kv.Delete = v != 0
+				msgBytes = msgBytes[inN+l:]
+			default:
+				_, _, l := protowire.ConsumeField(msgBytes[inN:])
+				if l < 0 {
+					return nil, fmt.Errorf("skip unknown field=%d failed", inNum)
+				}
+				msgBytes = msgBytes[inN+l:]
+			}
+		}
+
+		pairs = append(pairs, kv)
+		b = b[n+m:]
 	}
-	return out, nil
+
+	return pairs, nil
 }
 
 func (c *remoteClient) Close() error {
