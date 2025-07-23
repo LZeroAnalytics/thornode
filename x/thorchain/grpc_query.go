@@ -9,6 +9,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/constants"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 )
 
@@ -28,11 +29,13 @@ func NewQueryServerImpl(mgr *Mgrs, txConfig client.TxConfig, kbs cosmos.KeybaseS
 func (s *queryServer) unwrapSdkContext(c context.Context) sdk.Context {
 	ctx := sdk.UnwrapSDKContext(c)
 	if s.regInit {
+		ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
 		return ctx
 	}
 	initManager(ctx, s.mgr) // NOOP except regtest
 	s.regInit = true
 	
+	ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
 	return ctx
 }
 
