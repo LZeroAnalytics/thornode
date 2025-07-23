@@ -6,12 +6,14 @@ import (
 
 	math "cosmossdk.io/math"
 	"github.com/blang/semver"
+	"google.golang.org/grpc/metadata"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/bank/types"
 	bank "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/constants"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
@@ -30,6 +32,13 @@ func NewBankSendHandler(h BaseHandler[sdk.Msg]) BankSendHandler {
 // Send is the entrypoint for bank MsgSend, passing through to the thorchain handler.
 func (h BankSendHandler) Send(goCtx context.Context, msg *bank.MsgSend) (*bank.MsgSendResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
+	
 	if _, err := h.h.Run(ctx, msg); err != nil {
 		return nil, err
 	}

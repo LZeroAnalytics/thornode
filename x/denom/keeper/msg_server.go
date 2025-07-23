@@ -3,8 +3,10 @@ package keeper
 import (
 	"context"
 
+	"google.golang.org/grpc/metadata"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	"gitlab.com/thorchain/thornode/v3/constants"
 	"gitlab.com/thorchain/thornode/v3/x/denom/types"
 )
 
@@ -22,6 +24,12 @@ var _ types.MsgServer = msgServer{}
 
 func (server msgServer) CreateDenom(goCtx context.Context, msg *types.MsgCreateDenom) (*types.MsgCreateDenomResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
 
 	denom, err := server.Keeper.CreateDenom(ctx, msg.Id, msg.Sender)
 	if err != nil {
@@ -51,6 +59,12 @@ func (server msgServer) CreateDenom(goCtx context.Context, msg *types.MsgCreateD
 
 func (server msgServer) MintTokens(goCtx context.Context, msg *types.MsgMintTokens) (*types.MsgMintTokensResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
 
 	admin, err := server.Keeper.GetAdmin(ctx, msg.Amount.GetDenom())
 	if err != nil {
@@ -79,6 +93,12 @@ func (server msgServer) MintTokens(goCtx context.Context, msg *types.MsgMintToke
 
 func (server msgServer) BurnTokens(goCtx context.Context, msg *types.MsgBurnTokens) (*types.MsgBurnTokensResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
 
 	admin, err := server.Keeper.GetAdmin(ctx, msg.Amount.GetDenom())
 	if err != nil {
@@ -107,6 +127,13 @@ func (server msgServer) BurnTokens(goCtx context.Context, msg *types.MsgBurnToke
 
 func (server msgServer) ChangeDenomAdmin(goCtx context.Context, msg *types.MsgChangeDenomAdmin) (*types.MsgChangeDenomAdminResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
+	
 	admin, err := server.Keeper.GetAdmin(ctx, msg.Denom)
 	if err != nil {
 		return nil, err
