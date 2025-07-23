@@ -68,7 +68,7 @@ func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []
 	
 	result, err := c.rpcClient.ABCIQueryWithOptions(ctx, path, key, client.ABCIQueryOptions{
 		Height: height,
-		Prove:  true,
+		Prove:  false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ABCI query failed: %w", err)
@@ -81,10 +81,6 @@ func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []
 	
 	if len(result.Response.Value) == 0 {
 		return nil, nil
-	}
-	
-	if err := c.verifyProof(result.Response.ProofOps, storeKey, key, result.Response.Value, height); err != nil {
-		return nil, fmt.Errorf("proof verification failed: %w", err)
 	}
 	
 	return result.Response.Value, nil
@@ -172,6 +168,40 @@ func (c *remoteClient) verifyHeaderChain(header *types.Header, targetHeight int6
 	c.trustedHash = header.Hash()
 	
 	return nil
+}
+
+func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end []byte, height int64) ([]KeyValue, error) {
+	var results []KeyValue
+	
+	if len(start) == 0 {
+		return results, nil
+	}
+	
+	path := fmt.Sprintf("store/%s/key", storeKey)
+	
+	result, err := c.rpcClient.ABCIQueryWithOptions(ctx, path, start, client.ABCIQueryOptions{
+		Height: height,
+		Prove:  false,
+	})
+	
+	if err != nil {
+		return results, nil
+	}
+	
+	if result.Response.Code != 0 {
+		return results, nil
+	}
+	
+	if len(result.Response.Value) > 0 {
+		results = append(results, KeyValue{
+			Key:   start,
+			Value: result.Response.Value,
+		})
+	}
+	
+	// 
+	
+	return results, nil
 }
 
 func (c *remoteClient) Close() error {

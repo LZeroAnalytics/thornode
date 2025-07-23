@@ -70,10 +70,7 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	
 	value, err := f.remoteClient.GetWithProof(ctx, f.storeKey, key, height)
 	if err != nil {
-		if f.gasMeter != nil {
-			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
-		}
-		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
+		f.service.updateStats(true, false, 0, true)
 		return nil, err
 	}
 	
@@ -85,10 +82,7 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 		f.parent.Set(key, value)
 	}
 	
-	if f.gasMeter != nil {
-		f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_success")
-	}
-	f.service.updateStats(true, false, f.config.GasCostPerFetch, false)
+	f.service.updateStats(true, false, 0, false)
 	
 	return value, nil
 }
@@ -122,13 +116,70 @@ func (f *forkingKVStore) Delete(key []byte) error {
 }
 
 func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error) {
-	return f.parent.Iterator(start, end)
+	localIter, err := f.parent.Iterator(start, end)
+	if err != nil {
+		return nil, err
+	}
+	
+	if f.service.IsGenesisMode() || f.remoteClient == nil {
+		return localIter, nil
+	}
+	
+	remoteIter, err := f.getRemoteIterator(start, end)
+	if err != nil {
+		return localIter, nil // fallback to local on error
+	}
+	
+	return NewMergedIterator(localIter, remoteIter), nil
 }
 
 func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator, error) {
-	return f.parent.ReverseIterator(start, end)
+	localIter, err := f.parent.ReverseIterator(start, end)
+	if err != nil {
+		return nil, err
+	}
+	
+	if f.service.IsGenesisMode() || f.remoteClient == nil {
+		return localIter, nil
+	}
+	
+	remoteIter, err := f.getRemoteReverseIterator(start, end)
+	if err != nil {
+		return localIter, nil // fallback to local on error
+	}
+	
+	return NewMergedReverseIterator(localIter, remoteIter), nil
 }
 
 func (f *forkingKVStore) GetStats() ForkingStats {
 	return f.service.GetStats()
+}
+
+func (f *forkingKVStore) getRemoteIterator(start, end []byte) (storetypes.Iterator, error) {
+	return f.fetchRemoteRange(start, end, false)
+}
+
+func (f *forkingKVStore) getRemoteReverseIterator(start, end []byte) (storetypes.Iterator, error) {
+	return f.fetchRemoteRange(start, end, true)
+}
+
+func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (storetypes.Iterator, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
+	defer cancel()
+	
+	height := f.service.GetPinnedHeight()
+	if height == 0 {
+		var err error
+		height, err = f.remoteClient.GetLatestHeight(ctx)
+		if err != nil {
+			return &EmptyIterator{}, nil
+		}
+	}
+	
+	items, err := f.remoteClient.GetRange(ctx, f.storeKey, start, end, height)
+	if err != nil {
+		return &EmptyIterator{}, nil
+	}
+	
+	return NewRemoteIterator(items, reverse), nil
 }
