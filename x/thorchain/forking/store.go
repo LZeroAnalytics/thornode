@@ -2,6 +2,8 @@ package forking
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 
 	storetypes "cosmossdk.io/core/store"
 )
@@ -37,38 +39,51 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
+	// Debug: entry
+	fmt.Printf("[forking][GET] store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 	if v, err := f.parent.Get(key); err == nil && v != nil {
+		fmt.Printf("[forking][GET] local-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 		return v, nil
 	}
 
 	if f.config.CacheEnabled {
 		if cached := f.cache.Get(key); cached != nil {
+			fmt.Printf("[forking][GET] cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 			f.service.updateStats(false, true, 0, false)
 			return cached, nil
 		}
 	}
 
 	if f.service.IsGenesisMode() || f.remoteClient == nil {
+		fmt.Printf("[forking][GET] remote-disabled(genesis|nil client) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 		return nil, nil
 	}
 
 	height := f.service.GetPinnedHeight()
+	fmt.Printf("[forking][GET] pinned-height=%d store=%s key=%s\n", height, f.storeKey, hex.EncodeToString(key))
 	if height == 0 {
+		fmt.Printf("[forking][GET] remote-disabled(height=0) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 		return nil, nil
 	}
 
-	return nil, nil
-
+	fmt.Printf("[forking][GET] remote-fetch store=%s key=%s height=%d\n", f.storeKey, hex.EncodeToString(key), height)
 	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
 	defer cancel()
 
 	v, err := f.remoteClient.GetWithProof(ctx, f.storeKey, key, height)
 	if err != nil {
+		fmt.Printf("[forking][GET] remote-error store=%s key=%s height=%d err=%v\n", f.storeKey, hex.EncodeToString(key), height, err)
 		if f.gasMeter != nil && f.config.GasCostPerFetch > 0 {
 			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
 		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
 		return nil, err
+	}
+
+	if v == nil {
+		fmt.Printf("[forking][GET] remote-miss store=%s key=%s height=%d\n", f.storeKey, hex.EncodeToString(key), height)
+	} else {
+		fmt.Printf("[forking][GET] remote-hit store=%s key=%s height=%d size=%d\n", f.storeKey, hex.EncodeToString(key), height, len(v))
 	}
 
 	if f.config.CacheEnabled && v != nil {
@@ -104,8 +119,10 @@ func (f *forkingKVStore) Delete(key []byte) error {
 }
 
 func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error) {
+	fmt.Printf("[forking][ITER] store=%s start=%s end=%s\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end))
 	localIter, err := f.parent.Iterator(start, end)
 	if err != nil {
+		fmt.Printf("[forking][ITER] local-err store=%s err=%v\n", f.storeKey, err)
 		return nil, err
 	}
 	if f.service.IsGenesisMode() || f.remoteClient == nil {
@@ -122,8 +139,10 @@ func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error
 }
 
 func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator, error) {
+	fmt.Printf("[forking][RITER] store=%s start=%s end=%s\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end))
 	localIter, err := f.parent.ReverseIterator(start, end)
 	if err != nil {
+		fmt.Printf("[forking][RITER] local-err store=%s err=%v\n", f.storeKey, err)
 		return nil, err
 	}
 	if f.service.IsGenesisMode() || f.remoteClient == nil {
