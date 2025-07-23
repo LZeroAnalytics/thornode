@@ -421,3 +421,5 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/cosmos/evm/evmd v0.0.0 => github.com/cosmos/evm v1.0.0-rc2
