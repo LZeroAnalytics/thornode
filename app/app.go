@@ -91,8 +91,6 @@ import (
 
 	evm "github.com/cosmos/evm/encoding/codec"
 	"github.com/cosmos/evm/ethereum/eip712"
-
-	"gitlab.com/thorchain/thornode/v3/constants"
 )
 
 const (
