@@ -39,6 +39,7 @@ func (qsr *QueryServiceRouter) AddCustomRoute(serviceName string, handler interf
 }
 
 type BankQueryWrapper struct {
+	banktypes.UnimplementedQueryServer
 	originalHandler banktypes.QueryServer
 }
 
