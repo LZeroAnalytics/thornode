@@ -163,9 +163,7 @@ func (k KVStore) GetKey(prefix types.DbPrefix, key string, other ...string) []by
 
 // getIterator - get an iterator for given prefix
 func (k KVStore) getIterator(ctx cosmos.Context, prefix types.DbPrefix) cosmos.Iterator {
-	fmt.Printf("[DEBUG][getIterator] Called with prefix=%s\n", string(prefix))
 	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	fmt.Printf("[DEBUG][getIterator] Store adapter created\n")
 	return cosmos.KVStorePrefixIterator(store, []byte(prefix))
 }
 

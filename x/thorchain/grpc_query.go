@@ -27,16 +27,14 @@ func NewQueryServerImpl(mgr *Mgrs, txConfig client.TxConfig, kbs cosmos.KeybaseS
 }
 
 func (s *queryServer) unwrapSdkContext(c context.Context) sdk.Context {
-	fmt.Printf("[DEBUG][unwrapSdkContext] Called - context already marked by gRPC interceptor\n")
 	ctx := sdk.UnwrapSDKContext(c)
 	if s.regInit {
-		fmt.Printf("[DEBUG][unwrapSdkContext] Using existing context (regInit=true)\n")
 		return ctx
 	}
 	initManager(ctx, s.mgr) // NOOP except regtest
 	s.regInit = true
 	
-	fmt.Printf("[DEBUG][unwrapSdkContext] Manager initialized (regInit=false)\n")
+	ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
 	return ctx
 }
 

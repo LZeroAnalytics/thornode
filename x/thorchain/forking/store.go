@@ -45,48 +45,33 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
-	fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Checking remote fetch conditions\n")
-	
 	if f.service.IsGenesisMode() {
-		fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Blocked: Genesis mode\n")
 		return false
 	}
 
 	if f.remoteClient == nil {
-		fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Blocked: No remote client\n")
 		return false
 	}
 
 	if f.service.IsBlockProcessing() {
-		fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Blocked: Block processing\n")
 		return false
 	}
 
 	if f.sdkCtx != nil {
 		if userAPICall, ok := f.sdkCtx.Context().Value(constants.CtxUserAPICall).(bool); ok && userAPICall {
-			fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Allowed: User API call context found\n")
 			return true
 		}
 
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
-			fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Blocked: CheckTx or ReCheckTx context\n")
 			return false
 		}
-		
-		fmt.Printf("[DEBUG][shouldAllowRemoteFetch] SDK context present but no user API call marker\n")
-	} else {
-		fmt.Printf("[DEBUG][shouldAllowRemoteFetch] No SDK context available\n")
 	}
 
-	fmt.Printf("[DEBUG][shouldAllowRemoteFetch] Allowed: Default case\n")
 	return true
 }
 
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
-	fmt.Printf("[DEBUG][Get] Called with key=%s store=%s\n", hex.EncodeToString(key), f.storeKey)
-	
 	if v, err := f.parent.Get(key); err == nil && v != nil {
-		fmt.Printf("[DEBUG][Get] Found in parent store\n")
 		return v, nil
 	}
 
@@ -98,9 +83,7 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 		}
 	}
 
-	fmt.Printf("[DEBUG][Get] Not found locally, checking remote fetch conditions\n")
 	if !f.shouldAllowRemoteFetch() {
-		fmt.Printf("[DEBUG][Get] Remote fetch not allowed, returning nil\n")
 		return nil, nil
 	}
 
