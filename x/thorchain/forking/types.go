@@ -9,6 +9,7 @@ import (
 
 type RemoteConfig struct {
 	RPC string
+	API string
 	ChainID string
 	ForkHeight int64
 	TrustHeight int64
@@ -24,6 +25,7 @@ type RemoteConfig struct {
 func DefaultRemoteConfig() RemoteConfig {
 	return RemoteConfig{
 		RPC:            "https://thornode.ninerealms.com:26657",
+		API:            "https://thornode.ninerealms.com",
 		ChainID:        "thorchain-mainnet-v1",
 		ForkHeight:     0, // 0 = latest (default)
 		TrustHeight:    0, // Will be set dynamically
