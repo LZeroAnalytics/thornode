@@ -46,27 +46,24 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	if f.service.IsGenesisMode() {
 		return false
 	}
-	
+
 	if f.remoteClient == nil {
 		return false
 	}
-	
+
 	if f.service.IsBlockProcessing() {
 		return false
 	}
-	
+
 	if f.sdkCtx != nil && (f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx()) {
 		return false
 	}
-	
+
 	return true
 }
 
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
-	// Debug: entry
-	fmt.Printf("[forking][GET] store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 	if v, err := f.parent.Get(key); err == nil && v != nil {
-		fmt.Printf("[forking][GET] local-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 		return v, nil
 	}
 
@@ -79,7 +76,6 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	}
 
 	if !f.shouldAllowRemoteFetch() {
-		fmt.Printf("[forking][GET] remote-disabled(internal-operation) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 		return nil, nil
 	}
 
@@ -143,15 +139,13 @@ func (f *forkingKVStore) Delete(key []byte) error {
 }
 
 func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error) {
-	fmt.Printf("[forking][ITER] store=%s start=%s end=%s\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end))
 	localIter, err := f.parent.Iterator(start, end)
 	if err != nil {
 		fmt.Printf("[forking][ITER] local-err store=%s err=%v\n", f.storeKey, err)
 		return nil, err
 	}
-	
+
 	if !f.shouldAllowRemoteFetch() {
-		fmt.Printf("[forking][ITER] remote-disabled(internal-operation) store=%s\n", f.storeKey)
 		return localIter, nil
 	}
 
@@ -163,15 +157,13 @@ func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error
 }
 
 func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator, error) {
-	fmt.Printf("[forking][RITER] store=%s start=%s end=%s\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end))
 	localIter, err := f.parent.ReverseIterator(start, end)
 	if err != nil {
 		fmt.Printf("[forking][RITER] local-err store=%s err=%v\n", f.storeKey, err)
 		return nil, err
 	}
-	
+
 	if !f.shouldAllowRemoteFetch() {
-		fmt.Printf("[forking][RITER] remote-disabled(internal-operation) store=%s\n", f.storeKey)
 		return localIter, nil
 	}
 
@@ -196,7 +188,7 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 	if !f.shouldAllowRemoteFetch() {
 		return &EmptyIterator{}, nil
 	}
-	
+
 	height := f.service.GetPinnedHeight()
 	if height == 0 || f.remoteClient == nil {
 		return &EmptyIterator{}, nil
