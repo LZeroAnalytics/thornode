@@ -27,15 +27,18 @@ func NewQueryServerImpl(mgr *Mgrs, txConfig client.TxConfig, kbs cosmos.KeybaseS
 }
 
 func (s *queryServer) unwrapSdkContext(c context.Context) sdk.Context {
+	fmt.Printf("[DEBUG][unwrapSdkContext] Called - setting user API call context\n")
 	ctx := sdk.UnwrapSDKContext(c)
 	if s.regInit {
 		ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		fmt.Printf("[DEBUG][unwrapSdkContext] Context marked as user API call (regInit=true)\n")
 		return ctx
 	}
 	initManager(ctx, s.mgr) // NOOP except regtest
 	s.regInit = true
 	
 	ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+	fmt.Printf("[DEBUG][unwrapSdkContext] Context marked as user API call (regInit=false)\n")
 	return ctx
 }
 

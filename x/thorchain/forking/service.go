@@ -43,6 +43,7 @@ func NewForkingKVStoreService(
 }
 
 func (f *forkingKVStoreService) OpenKVStore(ctx context.Context) storetypes.KVStore {
+	fmt.Printf("[DEBUG][OpenKVStore] Creating forking store for key=%s\n", f.storeKey)
 	parentStore := f.parent.OpenKVStore(ctx)
 
 	var gasMeter GasMeter
@@ -50,6 +51,9 @@ func (f *forkingKVStoreService) OpenKVStore(ctx context.Context) storetypes.KVSt
 	if sdkContext, ok := ctx.(sdk.Context); ok {
 		gasMeter = NewSDKGasMeter(sdkContext.GasMeter())
 		sdkCtx = &sdkContext
+		fmt.Printf("[DEBUG][OpenKVStore] SDK context found and passed to forking store\n")
+	} else {
+		fmt.Printf("[DEBUG][OpenKVStore] No SDK context available\n")
 	}
 
 	return NewForkingKVStore(parentStore, f.remoteClient, f.cache, f.config, f.storeKey, f, gasMeter, sdkCtx)
