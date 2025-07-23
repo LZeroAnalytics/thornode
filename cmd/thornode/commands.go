@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	cmtcfg "github.com/cometbft/cometbft/config"
 	dbm "github.com/cosmos/cosmos-db"
@@ -41,20 +39,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/server/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
 	"github.com/cosmos/cosmos-sdk/types/mempool"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	authcmd "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
-
-	errorsmod "cosmossdk.io/errors"
-	gogogrpc "github.com/cosmos/gogoproto/grpc"
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 
 	//	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
@@ -62,7 +49,6 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/cmd/thornode/cmd"
 	"gitlab.com/thorchain/thornode/v3/config"
-	"gitlab.com/thorchain/thornode/v3/constants"
 	thorlog "gitlab.com/thorchain/thornode/v3/log"
 
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/client/cli"
@@ -432,93 +418,10 @@ func DefaultBaseappOptions(appOpts types.AppOptions) []func(*baseapp.BaseApp) {
 		baseapp.SetIAVLDisableFastNode(cast.ToBool(appOpts.Get(server.FlagDisableIAVLFastNode))),
 		defaultMempool,
 		baseapp.SetChainID(chainID),
-		setCustomGRPCInterceptor(),
 		// baseapp.SetQueryGasLimit(cast.ToUint64(appOpts.Get(server.FlagQueryGasLimit))),
 	}
 }
 
-// setCustomGRPCInterceptor returns a BaseApp option that sets up a custom gRPC interceptor
-func setCustomGRPCInterceptor() func(*baseapp.BaseApp) {
-	return func(app *baseapp.BaseApp) {
-		originalRegisterGRPCServer := app.RegisterGRPCServer
-		app.RegisterGRPCServer = func(server gogogrpc.Server) {
-			interceptor := func(grpcCtx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-				md, ok := metadata.FromIncomingContext(grpcCtx)
-				if !ok {
-					return nil, status.Error(codes.Internal, "unable to retrieve metadata")
-				}
-
-				var height int64
-				if heightHeaders := md.Get(grpctypes.GRPCBlockHeightHeader); len(heightHeaders) == 1 {
-					height, err = strconv.ParseInt(heightHeaders[0], 10, 64)
-					if err != nil {
-						return nil, errorsmod.Wrapf(
-							sdkerrors.ErrInvalidRequest,
-							"Custom gRPC interceptor: invalid height header %q: %v", grpctypes.GRPCBlockHeightHeader, err)
-					}
-				}
-
-				sdkCtx, err := app.CreateQueryContextWithCheckHeader(height, false, true)
-				if err != nil {
-					return nil, err
-				}
-
-				sdkCtx = sdkCtx.WithContext(context.WithValue(sdkCtx.Context(), constants.CtxUserAPICall, true))
-
-				if height == 0 {
-					height = sdkCtx.BlockHeight()
-				}
-
-				grpcCtx = context.WithValue(grpcCtx, sdk.SdkContextKey, sdkCtx)
-
-				md = metadata.Pairs(grpctypes.GRPCBlockHeightHeader, strconv.FormatInt(height, 10))
-				if err = grpc.SetHeader(grpcCtx, md); err != nil {
-				}
-
-				defer func() {
-					if r := recover(); r != nil {
-						switch rType := r.(type) {
-						case storetypes.ErrorOutOfGas:
-							err = errorsmod.Wrapf(sdkerrors.ErrOutOfGas, "Query gas limit exceeded: %v, out of gas in location: %v", sdkCtx.GasMeter().Limit(), rType.Descriptor)
-						default:
-							panic(r)
-						}
-					}
-				}()
-
-				return handler(grpcCtx, req)
-			}
-
-			for _, data := range app.GRPCQueryRouter().serviceData {
-				desc := data.serviceDesc
-				newMethods := make([]grpc.MethodDesc, len(desc.Methods))
-
-				for i, method := range desc.Methods {
-					methodHandler := method.Handler
-					newMethods[i] = grpc.MethodDesc{
-						MethodName: method.MethodName,
-						Handler: func(srv any, ctx context.Context, dec func(any) error, _ grpc.UnaryServerInterceptor) (any, error) {
-							return methodHandler(srv, ctx, dec, grpcmiddleware.ChainUnaryServer(
-								grpcrecovery.UnaryServerInterceptor(),
-								interceptor,
-							))
-						},
-					}
-				}
-
-				newDesc := &grpc.ServiceDesc{
-					ServiceName: desc.ServiceName,
-					HandlerType: desc.HandlerType,
-					Methods:     newMethods,
-					Streams:     desc.Streams,
-					Metadata:    desc.Metadata,
-				}
-
-				server.RegisterService(newDesc, data.handler)
-			}
-		}
-	}
-}
 
 var tempDir = func() string {
 	dir, err := os.MkdirTemp("", "simd")
