@@ -297,7 +297,10 @@ func CustomGRPCGatewayRouter(apiSvr *api.Server) {
 		// Cosmos sdk expect the GRPCBlockHeightHeader to be set if the latest height is not used.
 		// This function will extract the height query param and set it in the metadata for the sdk to consume.
 		runtime.WithMetadata(func(ctx context.Context, req *http.Request) metadata.MD {
-			md := make(metadata.MD, 1)
+			md := make(metadata.MD, 2)
+			
+			md.Set("user-api-call", "true")
+			
 			for key := range req.Header {
 				// if the GRPCBlockHeightHeader is set, use that and ignore the height query parameter
 				if key == sdkgrpc.GRPCBlockHeightHeader {
