@@ -171,8 +171,9 @@ type THORChainApp struct {
 	sm *module.SimulationManager
 
 	// module configurator
-	configurator module.Configurator
-	once         sync.Once
+	configurator        module.Configurator
+	queryServiceRouter  *QueryServiceRouter
+	once                sync.Once
 }
 
 
@@ -536,6 +537,7 @@ func NewChainApp(
 
 	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
+	app.queryServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Query", NewBankQueryWrapper(app.BankKeeper))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
 
@@ -652,7 +654,8 @@ func NewChainApp(
 	// Uncomment if you want to set a custom migration order here.
 	// app.ModuleManager.SetOrderMigrations(custom order)
 
-	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.GRPCQueryRouter())
+	app.queryServiceRouter = NewQueryServiceRouter(app.BaseApp.GRPCQueryRouter())
+	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.queryServiceRouter)
 	err = app.ModuleManager.RegisterServices(app.configurator)
 	if err != nil {
 		panic(err)
