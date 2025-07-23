@@ -58,6 +58,7 @@ const (
 	CtxLoanTxID      contextKey = "loan-txid"
 	CtxLoanToAddress contextKey = "loan-toaddress"
 	CtxObservedTx    contextKey = "observed-tx"
+	CtxUserAPICall   contextKey = "user-api-call"
 )
 
 // Permitted characters in Mimirs

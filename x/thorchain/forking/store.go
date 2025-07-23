@@ -8,6 +8,7 @@ import (
 
 	storetypes "cosmossdk.io/core/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"gitlab.com/thorchain/thornode/v3/constants"
 )
 
 type forkingKVStore struct {
@@ -56,8 +57,14 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 		return false
 	}
 
-	if f.sdkCtx != nil && (f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx()) {
-		return false
+	if f.sdkCtx != nil {
+		if userAPICall, ok := f.sdkCtx.Context().Value(constants.CtxUserAPICall).(bool); ok && userAPICall {
+			return true
+		}
+
+		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
+			return false
+		}
 	}
 
 	return true
