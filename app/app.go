@@ -160,6 +160,9 @@ type THORChainApp struct {
 	msgServiceRouter *MsgServiceRouter // router for redirecting Msg service messages
 	WasmKeeper       wasmkeeper.Keeper
 
+	// forking services
+	forkingServices []forking.ForkingKVStoreService
+
 	// the module manager
 	ModuleManager      *module.Manager
 	BasicModuleManager module.BasicManager
@@ -352,8 +355,13 @@ func NewChainApp(
 	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
 	forkingEnabled := forkingRPC != "" && forkingChainID != ""
 	
+	var forkingConfig forking.RemoteConfig
+	var remoteClient forking.RemoteClient
+	var wasmForkingService forking.ForkingKVStoreService
+	
 	if forkingEnabled {
-		forkingConfig := forking.RemoteConfig{
+		logger.Info("Forking enabled", "rpc", forkingRPC, "chain_id", forkingChainID)
+		forkingConfig = forking.RemoteConfig{
 			RPC:             forkingRPC,
 			ChainID:         forkingChainID,
 			ForkHeight:      cast.ToInt64(appOpts.Get("fork.height")),
@@ -366,6 +374,7 @@ func NewChainApp(
 			CacheSize:       cast.ToInt(appOpts.Get("fork.cache-size")),
 			GasCostPerFetch: cast.ToUint64(appOpts.Get("fork.gas-cost-per-fetch")),
 		}
+		logger.Info("Forking config", "height", forkingConfig.ForkHeight, "cache_enabled", forkingConfig.CacheEnabled, "cache_size", forkingConfig.CacheSize)
 		
 		if forkingConfig.TrustingPeriod == 0 {
 			forkingConfig.TrustingPeriod = 24 * time.Hour
@@ -383,22 +392,82 @@ func NewChainApp(
 			forkingConfig.GasCostPerFetch = 1000
 		}
 		
-		remoteClient, err := forking.NewRemoteClient(forkingConfig, app.appCodec)
+		var err error
+		logger.Info("Creating forking remote client...")
+		remoteClient, err = forking.NewRemoteClient(forkingConfig, app.appCodec)
 		if err != nil {
 			panic(fmt.Sprintf("failed to create forking remote client: %s", err))
 		}
+		logger.Info("Forking remote client created successfully")
 		
 		cache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute) // 5 minute TTL
 		if err != nil {
 			panic(fmt.Sprintf("failed to create forking cache: %s", err))
 		}
 		
-		thorchainStoreService = forking.NewForkingKVStoreService(
+		thorchainForkingService := forking.NewForkingKVStoreService(
 			runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]),
 			remoteClient,
 			cache,
 			forkingConfig,
 			thorchaintypes.StoreKey,
+		)
+		thorchainStoreService = thorchainForkingService
+		
+		bankCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create bank forking cache: %s", err))
+		}
+		authCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create auth forking cache: %s", err))
+		}
+		
+		bankForkingService := forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[banktypes.StoreKey]),
+			remoteClient, bankCache, forkingConfig, banktypes.StoreKey,
+		)
+		bankStoreService := bankForkingService
+		authForkingService := forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[authtypes.StoreKey]),
+			remoteClient, authCache, forkingConfig, authtypes.StoreKey,
+		)
+		authStoreService := authForkingService
+		
+		wasmCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create wasm forking cache: %s", err))
+		}
+		
+		wasmForkingService = forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[wasmtypes.StoreKey]),
+			remoteClient, wasmCache, forkingConfig, wasmtypes.StoreKey,
+		)
+		
+		app.forkingServices = []forking.ForkingKVStoreService{
+			thorchainForkingService,
+			bankForkingService,
+			authForkingService,
+			wasmForkingService,
+		}
+		logger.Info("Forking services initialized", "count", len(app.forkingServices))
+		
+		app.AccountKeeper = authkeeper.NewAccountKeeper(
+			app.appCodec,
+			authStoreService,
+			authtypes.ProtoBaseAccount,
+			maccPerms,
+			authcodec.NewBech32Codec(sdk.GetConfig().GetBech32AccountAddrPrefix()),
+			sdk.GetConfig().GetBech32AccountAddrPrefix(),
+			authtypes.NewModuleAddress(thorchain.ModuleName).String(),
+		)
+		app.BankKeeper = bankkeeper.NewBaseKeeper(
+			app.appCodec,
+			bankStoreService,
+			app.AccountKeeper,
+			BlockedAddresses(),
+			authtypes.NewModuleAddress(thorchain.ModuleName).String(),
+			logger,
 		)
 	} else {
 		thorchainStoreService = runtime.NewKVStoreService(keys[thorchaintypes.StoreKey])
@@ -428,9 +497,17 @@ func NewChainApp(
 
 	// The last arguments can contain custom message handlers, and custom query handlers,
 	// if we want to allow any custom callbacks
+	var wasmStoreService corestore.KVStoreService
+	
+	if forkingEnabled {
+		wasmStoreService = wasmForkingService
+	} else {
+		wasmStoreService = runtime.NewKVStoreService(keys[wasmtypes.StoreKey])
+	}
+
 	app.WasmKeeper = wasmkeeper.NewKeeper(
 		app.appCodec,
-		runtime.NewKVStoreService(keys[wasmtypes.StoreKey]),
+		wasmStoreService,
 		app.AccountKeeper,
 		NewWasmBankKeeper(app.BankKeeper),
 		app.StakingKeeper,
@@ -719,6 +796,12 @@ func (app *THORChainApp) Name() string { return app.BaseApp.Name() }
 
 // PreBlocker application updates every pre block
 func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {
+	for _, service := range app.forkingServices {
+		if err := service.BeginBlock(ctx.BlockHeight()); err != nil {
+			ctx.Logger().Error("failed to begin block on forking service", "error", err)
+		}
+	}
+	
 	return app.ModuleManager.PreBlock(ctx)
 }
 

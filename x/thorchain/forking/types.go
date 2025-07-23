@@ -39,8 +39,14 @@ func DefaultRemoteConfig() RemoteConfig {
 
 type RemoteClient interface {
 	GetWithProof(ctx context.Context, storeKey string, key []byte, height int64) ([]byte, error)
+	GetRange(ctx context.Context, storeKey string, start, end []byte, height int64) ([]KeyValue, error)
 	GetLatestHeight(ctx context.Context) (int64, error)
 	Close() error
+}
+
+type KeyValue struct {
+	Key   []byte
+	Value []byte
 }
 
 type Cache interface {
