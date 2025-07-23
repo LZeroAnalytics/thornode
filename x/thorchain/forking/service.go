@@ -15,9 +15,10 @@ type forkingKVStoreService struct {
 	config       RemoteConfig
 	storeKey     string
 
-	mu           sync.RWMutex
-	pinnedHeight int64
-	genesisMode  bool
+	mu              sync.RWMutex
+	pinnedHeight    int64
+	genesisMode     bool
+	blockProcessing bool
 
 	stats ForkingStats
 }
@@ -45,11 +46,13 @@ func (f *forkingKVStoreService) OpenKVStore(ctx context.Context) storetypes.KVSt
 	parentStore := f.parent.OpenKVStore(ctx)
 
 	var gasMeter GasMeter
-	if sdkCtx, ok := ctx.(sdk.Context); ok {
-		gasMeter = NewSDKGasMeter(sdkCtx.GasMeter())
+	var sdkCtx *sdk.Context
+	if sdkContext, ok := ctx.(sdk.Context); ok {
+		gasMeter = NewSDKGasMeter(sdkContext.GasMeter())
+		sdkCtx = &sdkContext
 	}
 
-	return NewForkingKVStore(parentStore, f.remoteClient, f.cache, f.config, f.storeKey, f, gasMeter)
+	return NewForkingKVStore(parentStore, f.remoteClient, f.cache, f.config, f.storeKey, f, gasMeter, sdkCtx)
 }
 
 func (f *forkingKVStoreService) GetStats() ForkingStats {
@@ -65,11 +68,15 @@ func (f *forkingKVStoreService) BeginBlock(height int64) error {
 	if height > 1 {
 		f.genesisMode = false
 	}
+	f.blockProcessing = true
 
 	return nil
 }
 
 func (f *forkingKVStoreService) EndBlock() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.blockProcessing = false
 	return nil
 }
 
@@ -81,6 +88,12 @@ func (f *forkingKVStoreService) IsGenesisMode() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.genesisMode
+}
+
+func (f *forkingKVStoreService) IsBlockProcessing() bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.blockProcessing
 }
 
 func (f *forkingKVStoreService) updateStats(remoteFetch bool, cacheHit bool, gasUsed uint64, proofFailed bool) {

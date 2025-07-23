@@ -46,6 +46,7 @@ type ForkingKVStoreService interface {
 	GetStats() ForkingStats
 	BeginBlock(height int64) error
 	EndBlock() error
+	IsBlockProcessing() bool
 }
 
 type ForkingStats struct {
