@@ -354,16 +354,15 @@ func NewChainApp(
 	forkingRPC := cast.ToString(appOpts.Get("fork.rpc"))
 	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
 	forkingEnabled := forkingRPC != "" && forkingChainID != ""
-	
+
 	var forkingConfig forking.RemoteConfig
 	var remoteClient forking.RemoteClient
 	var wasmForkingService forking.ForkingKVStoreService
-	
+
 	if forkingEnabled {
 		logger.Info("Forking enabled", "rpc", forkingRPC, "chain_id", forkingChainID)
 		forkingConfig = forking.RemoteConfig{
 			RPC:             forkingRPC,
-			API:             cast.ToString(appOpts.Get("fork.api")),
 			ChainID:         forkingChainID,
 			ForkHeight:      0, // Use latest height instead of pinned height
 			TrustHeight:     cast.ToInt64(appOpts.Get("fork.trust-height")),
@@ -376,7 +375,7 @@ func NewChainApp(
 			GasCostPerFetch: cast.ToUint64(appOpts.Get("fork.gas-cost-per-fetch")),
 		}
 		logger.Info("Forking config", "height", forkingConfig.ForkHeight, "cache_enabled", forkingConfig.CacheEnabled, "cache_size", forkingConfig.CacheSize)
-		
+
 		if forkingConfig.TrustingPeriod == 0 {
 			forkingConfig.TrustingPeriod = 24 * time.Hour
 		}
@@ -389,10 +388,9 @@ func NewChainApp(
 		if forkingConfig.CacheSize == 0 {
 			forkingConfig.CacheSize = 10000
 		}
-		if forkingConfig.GasCostPerFetch == 0 {
-			forkingConfig.GasCostPerFetch = 1000
-		}
-		
+
+		forkingConfig.GasCostPerFetch = 0
+
 		var err error
 		logger.Info("Creating forking remote client...")
 		remoteClient, err = forking.NewRemoteClient(forkingConfig, app.appCodec)
@@ -400,12 +398,12 @@ func NewChainApp(
 			panic(fmt.Sprintf("failed to create forking remote client: %s", err))
 		}
 		logger.Info("Forking remote client created successfully")
-		
+
 		cache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute) // 5 minute TTL
 		if err != nil {
 			panic(fmt.Sprintf("failed to create forking cache: %s", err))
 		}
-		
+
 		thorchainForkingService := forking.NewForkingKVStoreService(
 			runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]),
 			remoteClient,
@@ -414,7 +412,7 @@ func NewChainApp(
 			thorchaintypes.StoreKey,
 		)
 		thorchainStoreService = thorchainForkingService
-		
+
 		bankCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
 		if err != nil {
 			panic(fmt.Sprintf("failed to create bank forking cache: %s", err))
@@ -423,7 +421,7 @@ func NewChainApp(
 		if err != nil {
 			panic(fmt.Sprintf("failed to create auth forking cache: %s", err))
 		}
-		
+
 		bankForkingService := forking.NewForkingKVStoreService(
 			runtime.NewKVStoreService(keys[banktypes.StoreKey]),
 			remoteClient, bankCache, forkingConfig, banktypes.StoreKey,
@@ -434,17 +432,17 @@ func NewChainApp(
 			remoteClient, authCache, forkingConfig, authtypes.StoreKey,
 		)
 		authStoreService := authForkingService
-		
+
 		wasmCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
 		if err != nil {
 			panic(fmt.Sprintf("failed to create wasm forking cache: %s", err))
 		}
-		
+
 		wasmForkingService = forking.NewForkingKVStoreService(
 			runtime.NewKVStoreService(keys[wasmtypes.StoreKey]),
 			remoteClient, wasmCache, forkingConfig, wasmtypes.StoreKey,
 		)
-		
+
 		app.forkingServices = []forking.ForkingKVStoreService{
 			thorchainForkingService,
 			bankForkingService,
@@ -452,7 +450,7 @@ func NewChainApp(
 			wasmForkingService,
 		}
 		logger.Info("Forking services initialized", "count", len(app.forkingServices))
-		
+
 		app.AccountKeeper = authkeeper.NewAccountKeeper(
 			app.appCodec,
 			authStoreService,
@@ -499,7 +497,7 @@ func NewChainApp(
 	// The last arguments can contain custom message handlers, and custom query handlers,
 	// if we want to allow any custom callbacks
 	var wasmStoreService corestore.KVStoreService
-	
+
 	if forkingEnabled {
 		wasmStoreService = wasmForkingService
 	} else {
@@ -802,7 +800,7 @@ func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBl
 			ctx.Logger().Error("failed to begin block on forking service", "error", err)
 		}
 	}
-	
+
 	return app.ModuleManager.PreBlock(ctx)
 }
 

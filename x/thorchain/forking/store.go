@@ -37,58 +37,50 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
-	if value, err := f.parent.Get(key); err == nil && value != nil {
-		return value, nil
+	if v, err := f.parent.Get(key); err == nil && v != nil {
+		return v, nil
 	}
-	
+
 	if f.config.CacheEnabled {
 		if cached := f.cache.Get(key); cached != nil {
 			f.service.updateStats(false, true, 0, false)
 			return cached, nil
 		}
 	}
-	
+
 	if f.service.IsGenesisMode() || f.remoteClient == nil {
 		return nil, nil
 	}
-	
-	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
-	defer cancel()
-	
+
 	height := f.service.GetPinnedHeight()
 	if height == 0 {
-		var err error
-		height, err = f.remoteClient.GetLatestHeight(ctx)
-		if err != nil {
-			if f.gasMeter != nil {
-				f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
-			}
+		return nil, nil
+	}
+
+	return nil, nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
+	defer cancel()
+
+	v, err := f.remoteClient.GetWithProof(ctx, f.storeKey, key, height)
+	if err != nil {
+		if f.gasMeter != nil && f.config.GasCostPerFetch > 0 {
+			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
+		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
 		return nil, err
-		}
 	}
-	
-	value, err := f.remoteClient.GetWithProof(ctx, f.storeKey, key, height)
-	if err != nil {
-		f.service.updateStats(true, false, 0, true)
-		return nil, err
+
+	if f.config.CacheEnabled && v != nil {
+		f.cache.Set(key, v)
 	}
-	
-	if f.config.CacheEnabled && value != nil {
-		f.cache.Set(key, value)
-	}
-	
 	f.service.updateStats(true, false, 0, false)
-	
-	return value, nil
+	return v, nil
 }
 
 func (f *forkingKVStore) Has(key []byte) (bool, error) {
-	value, err := f.Get(key)
-	if err != nil {
-		return false, err
-	}
-	return value != nil, nil
+	v, err := f.Get(key)
+	return v != nil, err
 }
 
 func (f *forkingKVStore) Set(key []byte, value []byte) error {
@@ -116,16 +108,16 @@ func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error
 	if err != nil {
 		return nil, err
 	}
-	
 	if f.service.IsGenesisMode() || f.remoteClient == nil {
 		return localIter, nil
 	}
-	
-	remoteIter, err := f.getRemoteIterator(start, end)
-	if err != nil {
-		return localIter, nil // fallback to local on error
+
+	return localIter, nil
+
+	remoteIter, rerr := f.getRemoteIterator(start, end)
+	if rerr != nil {
+		return localIter, nil
 	}
-	
 	return NewMergedIterator(localIter, remoteIter), nil
 }
 
@@ -134,22 +126,20 @@ func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator
 	if err != nil {
 		return nil, err
 	}
-	
 	if f.service.IsGenesisMode() || f.remoteClient == nil {
 		return localIter, nil
 	}
-	
-	remoteIter, err := f.getRemoteReverseIterator(start, end)
-	if err != nil {
-		return localIter, nil // fallback to local on error
+
+	return localIter, nil
+
+	remoteIter, rerr := f.getRemoteReverseIterator(start, end)
+	if rerr != nil {
+		return localIter, nil
 	}
-	
 	return NewMergedReverseIterator(localIter, remoteIter), nil
 }
 
-func (f *forkingKVStore) GetStats() ForkingStats {
-	return f.service.GetStats()
-}
+func (f *forkingKVStore) GetStats() ForkingStats { return f.service.GetStats() }
 
 func (f *forkingKVStore) getRemoteIterator(start, end []byte) (storetypes.Iterator, error) {
 	return f.fetchRemoteRange(start, end, false)
@@ -160,18 +150,24 @@ func (f *forkingKVStore) getRemoteReverseIterator(start, end []byte) (storetypes
 }
 
 func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (storetypes.Iterator, error) {
+	height := f.service.GetPinnedHeight()
+	if height == 0 || f.remoteClient == nil {
+		return &EmptyIterator{}, nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), f.config.Timeout)
 	defer cancel()
-	
-	height := f.service.GetPinnedHeight()
-	if height == 0 {
-		var err error
-		height, err = f.remoteClient.GetLatestHeight(ctx)
-		if err != nil {
-			return &EmptyIterator{}, nil
+
+	items, err := f.remoteClient.GetRange(ctx, f.storeKey, start, end, height)
+	if err != nil {
+		return &EmptyIterator{}, err
+	}
+
+	if f.config.CacheEnabled {
+		for _, kv := range items {
+			f.cache.Set(kv.Key, kv.Value)
 		}
 	}
-	
-	items, _ := f.remoteClient.GetRange(ctx, f.storeKey, start, end, height)
+
 	return NewRemoteIterator(items, reverse), nil
 }
