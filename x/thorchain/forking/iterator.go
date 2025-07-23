@@ -1,6 +1,8 @@
 package forking
 
 import (
+	"fmt"
+	
 	storetypes "cosmossdk.io/core/store"
 )
 
@@ -12,30 +14,34 @@ type MergedIterator struct {
 }
 
 func NewMergedIterator(local, remote storetypes.Iterator) *MergedIterator {
+	fmt.Printf("DEBUG: NewMergedIterator created\n")
 	mi := &MergedIterator{
 		local:  local,
 		remote: remote,
 		seen:   make(map[string]bool),
 	}
 	mi.advance()
+	fmt.Printf("DEBUG: NewMergedIterator advance completed\n")
 	return mi
 }
 
 func (mi *MergedIterator) advance() {
-	if mi.local.Valid() {
+	if mi.local != nil && mi.local.Valid() {
 		mi.current = mi.local
 		key := string(mi.local.Key())
 		mi.seen[key] = true
 		return
 	}
 	
-	for mi.remote.Valid() {
-		key := string(mi.remote.Key())
-		if !mi.seen[key] {
-			mi.current = mi.remote
-			return
+	if mi.remote != nil {
+		for mi.remote.Valid() {
+			key := string(mi.remote.Key())
+			if !mi.seen[key] {
+				mi.current = mi.remote
+				return
+			}
+			mi.remote.Next()
 		}
-		mi.remote.Next()
 	}
 	
 	mi.current = nil
@@ -56,12 +62,14 @@ func (mi *MergedIterator) Valid() bool {
 }
 
 func (mi *MergedIterator) Next() {
+	fmt.Printf("DEBUG: MergedIterator.Next() called\n")
 	if mi.current == mi.local {
 		mi.local.Next()
 	} else if mi.current == mi.remote {
 		mi.remote.Next()
 	}
 	mi.advance()
+	fmt.Printf("DEBUG: MergedIterator.Next() completed\n")
 }
 
 func (mi *MergedIterator) Key() []byte {

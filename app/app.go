@@ -363,8 +363,9 @@ func NewChainApp(
 		logger.Info("Forking enabled", "rpc", forkingRPC, "chain_id", forkingChainID)
 		forkingConfig = forking.RemoteConfig{
 			RPC:             forkingRPC,
+			API:             cast.ToString(appOpts.Get("fork.api")),
 			ChainID:         forkingChainID,
-			ForkHeight:      cast.ToInt64(appOpts.Get("fork.height")),
+			ForkHeight:      0, // Use latest height instead of pinned height
 			TrustHeight:     cast.ToInt64(appOpts.Get("fork.trust-height")),
 			TrustHash:       cast.ToString(appOpts.Get("fork.trust-hash")),
 			TrustingPeriod:  cast.ToDuration(appOpts.Get("fork.trusting-period")),

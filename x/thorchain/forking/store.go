@@ -78,10 +78,6 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 		f.cache.Set(key, value)
 	}
 	
-	if value != nil {
-		f.parent.Set(key, value)
-	}
-	
 	f.service.updateStats(true, false, 0, false)
 	
 	return value, nil
@@ -176,10 +172,6 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 		}
 	}
 	
-	items, err := f.remoteClient.GetRange(ctx, f.storeKey, start, end, height)
-	if err != nil {
-		return &EmptyIterator{}, nil
-	}
-	
+	items, _ := f.remoteClient.GetRange(ctx, f.storeKey, start, end, height)
 	return NewRemoteIterator(items, reverse), nil
 }
