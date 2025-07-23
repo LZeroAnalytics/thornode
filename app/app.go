@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"google.golang.org/grpc"
 
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
 	reflectionv1 "cosmossdk.io/api/cosmos/reflection/v1"
@@ -179,13 +177,6 @@ type THORChainApp struct {
 	once         sync.Once
 }
 
-func userAPICallInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	if sdkCtx, ok := ctx.(sdk.Context); ok {
-		ctx = sdkCtx.WithContext(context.WithValue(sdkCtx.Context(), constants.CtxUserAPICall, true))
-	}
-	
-	return handler(ctx, req)
-}
 
 // NewChainApp returns a reference to an initialized ChainApp.
 func NewChainApp(
@@ -242,10 +233,6 @@ func NewChainApp(
 	// }
 	// baseAppOptions = append(baseAppOptions, voteExtOp)
 
-	grpcInterceptorOpt := func(bApp *baseapp.BaseApp) {
-		bApp.SetGRPCQueryDecorator(userAPICallInterceptor)
-	}
-	baseAppOptions = append(baseAppOptions, grpcInterceptorOpt)
 
 	bApp := baseapp.NewBaseApp(appName, logger, db, ec.TxConfig.TxDecoder(), baseAppOptions...)
 	bApp.SetCommitMultiStoreTracer(traceStore)
