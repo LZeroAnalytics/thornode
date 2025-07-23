@@ -537,7 +537,6 @@ func NewChainApp(
 
 	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
-	app.queryServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Query", NewBankQueryWrapper(app.BankKeeper))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
 
@@ -655,6 +654,7 @@ func NewChainApp(
 	// app.ModuleManager.SetOrderMigrations(custom order)
 
 	app.queryServiceRouter = NewQueryServiceRouter(app.BaseApp.GRPCQueryRouter())
+	app.queryServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Query", NewBankQueryWrapper(app.BankKeeper))
 	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.queryServiceRouter)
 	err = app.ModuleManager.RegisterServices(app.configurator)
 	if err != nil {
