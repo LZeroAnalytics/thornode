@@ -112,6 +112,8 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		return c.fetchLPData(ctx, keyStr, height)
 	case strings.Contains(lkey, "loan/") || strings.Contains(lstore, "loan"):
 		return c.fetchBorrowerData(ctx, keyStr, height)
+	case strings.Contains(lkey, "saver/") || strings.Contains(lstore, "saver"):
+		return c.fetchSaverData(ctx, keyStr, height)
 	default:
 		return nil, nil
 	}
@@ -237,6 +239,43 @@ func (c *remoteClient) fetchLPData(ctx context.Context, key string, height int64
 		PendingAsset:       sdkmath.NewUintFromString(lpResp.PendingAsset),
 		RuneDepositValue:   sdkmath.NewUintFromString(lpResp.RuneDepositValue),
 		AssetDepositValue:  sdkmath.NewUintFromString(lpResp.AssetDepositValue),
+func (c *remoteClient) fetchSaverData(ctx context.Context, key string, height int64) ([]byte, error) {
+	assetStr, addr := c.extractSaverFromKey(key)
+	if assetStr == "" || addr == "" {
+		return nil, nil
+	}
+	req := &types.QuerySaverRequest{
+		Asset:   assetStr,
+		Address: addr,
+		Height:  fmt.Sprintf("%d", height),
+	}
+	resp, err := c.queryClient.Saver(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC saver query failed: %w", err)
+	}
+	return c.codec.Marshal(resp)
+}
+
+func (c *remoteClient) extractSaverFromKey(key string) (string, string) {
+	lower := strings.ToLower(key)
+	idx := strings.Index(lower, "saver/")
+	if idx == -1 {
+		return "", ""
+	}
+	raw := strings.TrimLeft(key[idx+len("saver/"):], "/")
+	if raw == "" {
+		return "", ""
+	}
+	last := strings.LastIndex(raw, "/")
+	if last == -1 {
+		return "", ""
+	}
+	assetPart := raw[:last]
+	addr := raw[last+1:]
+	assetPart = c.normalizeAssetFromKeyAsset(assetPart)
+	return assetPart, addr
+}
+
 	}
 	return c.codec.Marshal(&record)
 }
@@ -469,14 +508,15 @@ func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 		return ""
 	}
 	if strings.Contains(raw, "/") {
-		parts := strings.Split(raw, "/")
-		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
-			right := strings.Join(parts[1:], "/")
-			if strings.HasPrefix(right, "0X") {
-				right = "0x" + strings.ToLower(right[2:])
-			}
-			return parts[0] + "." + right
+		parts := strings.SplitN(raw, "/", 2)
+		if parts[0] == "" || parts[1] == "" {
+			return ""
 		}
+		right := parts[1]
+		if strings.HasPrefix(right, "0x") || strings.HasPrefix(right, "0X") {
+			right = "0X" + strings.ToUpper(right[2:])
+		}
+		return parts[0] + "/" + right
 	}
 	return raw
 }
