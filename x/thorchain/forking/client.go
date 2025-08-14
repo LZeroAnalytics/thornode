@@ -108,6 +108,10 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		return c.fetchBalanceData(ctx, keyStr, height)
 	case strings.Contains(lkey, "node_account") || strings.Contains(lstore, "node"):
 		return c.fetchNodeData(ctx, keyStr, height)
+	case strings.Contains(lkey, "lp/") || strings.Contains(lstore, "lp"):
+		return c.fetchLPData(ctx, keyStr, height)
+	case strings.Contains(lkey, "loan/") || strings.Contains(lstore, "loan"):
+		return c.fetchBorrowerData(ctx, keyStr, height)
 	default:
 		return nil, nil
 	}
@@ -187,18 +191,142 @@ func (c *remoteClient) fetchAccountData(ctx context.Context, key string, height 
 	if address == "" {
 		return nil, nil
 	}
-	
 	req := &types.QueryAccountRequest{
 		Address: address,
 	}
-	
 	resp, err := c.queryClient.Account(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC account query failed: %w", err)
 	}
-	
 	return c.codec.Marshal(resp)
 }
+
+func (c *remoteClient) fetchLPData(ctx context.Context, key string, height int64) ([]byte, error) {
+	assetStr, addr := c.extractLPFromKey(key)
+	if assetStr == "" || addr == "" {
+		return nil, nil
+	}
+	req := &types.QueryLiquidityProviderRequest{
+		Asset:   assetStr,
+		Address: addr,
+		Height:  fmt.Sprintf("%d", height),
+	}
+	lpResp, err := c.queryClient.LiquidityProvider(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC liquidity provider query failed: %w", err)
+	}
+	asset, err := common.NewAsset(lpResp.Asset)
+	if err != nil {
+		return nil, nil
+	}
+	var runeAddr, assetAddr common.Address
+	if lpResp.RuneAddress != "" {
+		runeAddr, _ = common.NewAddress(lpResp.RuneAddress)
+	}
+	if lpResp.AssetAddress != "" {
+		assetAddr, _ = common.NewAddress(lpResp.AssetAddress)
+	}
+	record := types.LiquidityProvider{
+		Asset:              asset,
+		RuneAddress:        runeAddr,
+		AssetAddress:       assetAddr,
+		LastAddHeight:      lpResp.LastAddHeight,
+		LastWithdrawHeight: lpResp.LastWithdrawHeight,
+		Units:              sdkmath.NewUintFromString(lpResp.Units),
+		PendingRune:        sdkmath.NewUintFromString(lpResp.PendingRune),
+		PendingAsset:       sdkmath.NewUintFromString(lpResp.PendingAsset),
+		RuneDepositValue:   sdkmath.NewUintFromString(lpResp.RuneDepositValue),
+		AssetDepositValue:  sdkmath.NewUintFromString(lpResp.AssetDepositValue),
+	}
+	return c.codec.Marshal(&record)
+}
+
+func (c *remoteClient) fetchBorrowerData(ctx context.Context, key string, height int64) ([]byte, error) {
+	assetStr, addr := c.extractBorrowerFromKey(key)
+	if assetStr == "" || addr == "" {
+		return nil, nil
+	}
+	req := &types.QueryBorrowerRequest{
+		Asset:   assetStr,
+		Address: addr,
+		Height:  fmt.Sprintf("%d", height),
+	}
+	bResp, err := c.queryClient.Borrower(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC borrower query failed: %w", err)
+	}
+	asset, err := common.NewAsset(bResp.Asset)
+	if err != nil {
+		return nil, nil
+	}
+	var owner common.Address
+	if bResp.Owner != "" {
+		owner, _ = common.NewAddress(bResp.Owner)
+	}
+	record := types.Loan{
+		Owner:               owner,
+		Asset:               asset,
+		DebtIssued:          sdkmath.NewUintFromString(bResp.DebtIssued),
+		DebtRepaid:          sdkmath.NewUintFromString(bResp.DebtRepaid),
+		LastOpenHeight:      bResp.LastOpenHeight,
+		CollateralDeposited: sdkmath.NewUintFromString(bResp.CollateralDeposited),
+		CollateralWithdrawn: sdkmath.NewUintFromString(bResp.CollateralWithdrawn),
+	}
+	return c.codec.Marshal(&record)
+}
+
+func (c *remoteClient) extractLPFromKey(key string) (string, string) {
+	lower := strings.ToLower(key)
+	idx := strings.Index(lower, "lp/")
+	if idx == -1 {
+		return "", ""
+	}
+	raw := strings.TrimLeft(key[idx+len("lp/"):], "/")
+	if raw == "" {
+		return "", ""
+	}
+	last := strings.LastIndex(raw, "/")
+	if last == -1 {
+		return "", ""
+	}
+	assetPart := raw[:last]
+	addr := raw[last+1:]
+	assetPart = c.normalizeAssetFromKeyAsset(assetPart)
+	return assetPart, addr
+}
+
+func (c *remoteClient) extractBorrowerFromKey(key string) (string, string) {
+	lower := strings.ToLower(key)
+	idx := strings.Index(lower, "loan/")
+	if idx == -1 {
+		return "", ""
+	}
+	raw := strings.TrimLeft(key[idx+len("loan/"):], "/")
+	if raw == "" {
+		return "", ""
+	}
+	last := strings.LastIndex(raw, "/")
+	if last == -1 {
+		return "", ""
+	}
+	assetPart := raw[:last]
+	addr := raw[last+1:]
+	assetPart = c.normalizeAssetFromKeyAsset(assetPart)
+	return assetPart, addr
+}
+
+func (c *remoteClient) normalizeAssetFromKeyAsset(s string) string {
+	if strings.Contains(s, "/") {
+		parts := strings.SplitN(s, "/", 2)
+		right := parts[1]
+		if strings.HasPrefix(right, "0X") {
+			right = "0x" + strings.ToLower(right[2:])
+		}
+		return parts[0] + "/" + right
+	}
+	return s
+}
+
 
 func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height int64) ([]byte, error) {
 	address := c.extractAddressFromKey(key)
@@ -219,6 +347,67 @@ func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height 
 }
 
 func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int64) ([]byte, error) {
+	lower := strings.ToLower(key)
+	if idx := strings.Index(lower, "node_account/"); idx != -1 {
+		rest := strings.TrimPrefix(key[idx+len("node_account/"):], "/")
+		if rest != "" && !strings.Contains(rest, "/") {
+			req := &types.QueryNodeRequest{
+				Address: rest,
+				Height:  fmt.Sprintf("%d", height),
+			}
+			single, err := c.queryClient.Node(ctx, req)
+			if err != nil {
+				return nil, fmt.Errorf("gRPC node query failed: %w", err)
+			}
+			naAddr, err := common.NewAddress(single.NodeAddress)
+			if err != nil {
+				return nil, nil
+			}
+			accAddr, err := cosmos.AccAddressFromBech32(single.NodeAddress)
+			if err != nil {
+				return nil, nil
+			}
+			var status types.NodeStatus
+			switch strings.ToLower(single.Status) {
+			case "whitelisted":
+				status = types.NodeStatus_Whitelisted
+			case "standby":
+				status = types.NodeStatus_Standby
+			case "ready":
+				status = types.NodeStatus_Ready
+			case "active":
+				status = types.NodeStatus_Active
+			case "disabled":
+				status = types.NodeStatus_Disabled
+			default:
+				status = types.NodeStatus_Unknown
+			}
+			bond := sdkmath.NewUintFromString(single.TotalBond)
+			bondAddr, err := common.NewAddress(single.NodeOperatorAddress)
+			if err != nil {
+				bondAddr = common.NoAddress
+			}
+			record := types.NodeAccount{
+				NodeAddress:         accAddr,
+				Status:              status,
+				PubKeySet:           single.PubKeySet,
+				ValidatorConsPubKey: single.ValidatorConsPubKey,
+				Bond:                bond,
+				ActiveBlockHeight:   single.ActiveBlockHeight,
+				BondAddress:         bondAddr,
+				StatusSince:         single.StatusSince,
+				SignerMembership:    single.SignerMembership,
+				RequestedToLeave:    single.RequestedToLeave,
+				ForcedToLeave:       single.ForcedToLeave,
+				IPAddress:           single.IpAddress,
+				Version:             single.Version,
+				MissingBlocks:       uint64(single.MissingBlocks),
+				Maintenance:         single.Maintenance,
+			}
+			_ = naAddr
+			return c.codec.Marshal(&record)
+		}
+	}
 	req := &types.QueryNodesRequest{
 		Height: fmt.Sprintf("%d", height),
 	}
