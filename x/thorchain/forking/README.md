@@ -8,7 +8,7 @@ The forking module works by wrapping the standard Cosmos SDK `KVStoreService` wi
 
 1. First checks the local store for requested data
 2. If not found locally, checks an in-memory LRU cache
-3. If not cached, fetches from remote THORChain RPC with Merkle proof verification
+3. If not cached, fetches from remote THORChain gRPC with data verification
 4. Caches and stores the result locally for future access
 
 ## Architecture
@@ -28,7 +28,7 @@ The forking module works by wrapping the standard Cosmos SDK `KVStoreService` wi
 │  └───────────┘ └─────────────┘  │  2. cache check
 │        │                        │  3. ⇒ remoteFetch()
 │        ▼                        │
-│  Remote RPC (mainnet)           │
+│  Remote gRPC (mainnet)          │
 │    + Tendermint Light Client    │
 └─────────────────────────────────┘
 ```
@@ -46,8 +46,8 @@ The forking module works by wrapping the standard Cosmos SDK `KVStoreService` wi
 - Handles caching and local storage of remote data
 
 ### RemoteClient
-- Connects to remote THORChain RPC
-- Fetches data with Merkle proof verification
+- Connects to remote THORChain gRPC
+- Fetches data via gRPC query methods
 - Implements retry logic and error handling
 
 ### Cache
@@ -59,7 +59,7 @@ The forking module works by wrapping the standard Cosmos SDK `KVStoreService` wi
 
 The forking module is configured via CLI flags:
 
-- `--fork.rpc`: Remote RPC endpoint (e.g., "https://thornode.ninerealms.com:26657")
+- `--fork.grpc`: Remote gRPC endpoint (e.g., "thornode.ninerealms.com:9090")
 - `--fork.chain-id`: Remote chain ID
 - `--fork.trust-height`: Initial trusted height for light client
 - `--fork.trust-hash`: Initial trusted block hash
@@ -86,7 +86,7 @@ The forking module is automatically enabled when forking configuration is provid
 
 Example usage in development:
 ```bash
-thornode start --fork.rpc=https://thornode.ninerealms.com:26657 --fork.chain-id=thorchain-mainnet-v1
+thornode start --fork.grpc=thornode.ninerealms.com:9090 --fork.chain-id=thorchain-mainnet-v1
 ```
 
 ## Testing
