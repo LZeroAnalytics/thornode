@@ -233,11 +233,28 @@ func (c *remoteClient) fetchLPData(ctx context.Context, key string, height int64
 		Height:  fmt.Sprintf("%d", height),
 	}
 	lpResp, err := c.queryClient.LiquidityProvider(ctx, req)
-	if err != nil {
-		if isNotFoundErr(err) {
+	if err != nil || lpResp == nil || lpResp.Asset == "" {
+		lpsReq := &types.QueryLiquidityProvidersRequest{
+			Asset:  assetStr,
+			Height: fmt.Sprintf("%d", height),
+		}
+		lpsResp, lerr := c.queryClient.LiquidityProviders(ctx, lpsReq)
+		if lerr != nil {
+			if isNotFoundErr(lerr) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("gRPC liquidity providers fallback failed: %w", lerr)
+		}
+		ua := strings.ToUpper(addr)
+		for _, it := range lpsResp.LiquidityProviders {
+			if strings.ToUpper(it.RuneAddress) == ua || strings.ToUpper(it.AssetAddress) == ua {
+				lpResp = it
+				break
+			}
+		}
+		if lpResp == nil || lpResp.Asset == "" {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("gRPC liquidity provider query failed: %w", err)
 	}
 	asset, err := common.NewAsset(lpResp.Asset)
 	if err != nil {
@@ -276,11 +293,30 @@ func (c *remoteClient) fetchSaverData(ctx context.Context, key string, height in
 		Height:  fmt.Sprintf("%d", height),
 	}
 	resp, err := c.queryClient.Saver(ctx, req)
-	if err != nil {
-		if isNotFoundErr(err) {
+	if err != nil || resp == nil || resp.Asset == "" {
+		listReq := &types.QuerySaversRequest{
+			Asset:  assetStr,
+			Height: fmt.Sprintf("%d", height),
+		}
+		listResp, lerr := c.queryClient.Savers(ctx, listReq)
+		if lerr != nil {
+			if isNotFoundErr(lerr) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("gRPC savers fallback failed: %w", lerr)
+		}
+		ua := strings.ToUpper(addr)
+		var found *types.QuerySaverResponse
+		for _, s := range listResp.Savers {
+			if strings.ToUpper(s.AssetAddress) == ua {
+				found = s
+				break
+			}
+		}
+		if found == nil {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("gRPC saver query failed: %w", err)
+		return c.codec.Marshal(found)
 	}
 	return c.codec.Marshal(resp)
 }
@@ -316,11 +352,28 @@ func (c *remoteClient) fetchBorrowerData(ctx context.Context, key string, height
 		Height:  fmt.Sprintf("%d", height),
 	}
 	bResp, err := c.queryClient.Borrower(ctx, req)
-	if err != nil {
-		if isNotFoundErr(err) {
+	if err != nil || bResp == nil || bResp.Asset == "" {
+		listReq := &types.QueryBorrowersRequest{
+			Asset:  assetStr,
+			Height: fmt.Sprintf("%d", height),
+		}
+		listResp, lerr := c.queryClient.Borrowers(ctx, listReq)
+		if lerr != nil {
+			if isNotFoundErr(lerr) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("gRPC borrowers fallback failed: %w", lerr)
+		}
+		ua := strings.ToUpper(addr)
+		for _, b := range listResp.Borrowers {
+			if strings.ToUpper(b.Owner) == ua {
+				bResp = b
+				break
+			}
+		}
+		if bResp == nil || bResp.Asset == "" {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("gRPC borrower query failed: %w", err)
 	}
 	asset, err := common.NewAsset(bResp.Asset)
 	if err != nil {
