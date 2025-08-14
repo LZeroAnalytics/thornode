@@ -2,14 +2,17 @@ package forking
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"strings"
 
 	storepb "cosmossdk.io/api/cosmos/store/v1beta1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protowire"
-	
+
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 )
@@ -22,13 +25,55 @@ type remoteClient struct {
 }
 
 func NewRemoteClient(config RemoteConfig, cdc codec.Codec) (RemoteClient, error) {
-	conn, err := grpc.Dial(config.GRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	target := strings.TrimSpace(config.GRPC)
+
+	useTLS := false
+	hostForTLS := ""
+	normalized := target
+
+	if strings.HasPrefix(target, "grpcs://") {
+		useTLS = true
+		normalized = strings.TrimPrefix(target, "grpcs://")
+	} else if strings.HasPrefix(target, "https://") {
+		useTLS = true
+		normalized = strings.TrimPrefix(target, "https://")
+	}
+
+	if !useTLS {
+		if h, p, err := net.SplitHostPort(normalized); err == nil {
+			if p == "443" {
+				useTLS = true
+				hostForTLS = h
+			}
+		}
+	}
+
+	var dialOpt grpc.DialOption
+	if useTLS {
+		if hostForTLS == "" {
+			if h, _, err := net.SplitHostPort(normalized); err == nil {
+				hostForTLS = h
+			} else {
+				hostForTLS = normalized
+			}
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		creds := credentials.NewTLS(tlsCfg)
+		dialOpt = grpc.WithTransportCredentials(creds)
+	} else {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+
+	conn, err := grpc.Dial(normalized, dialOpt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
 	}
-	
+
 	client := types.NewQueryClient(conn)
-	
+
 	cli := &remoteClient{
 		grpcConn:    conn,
 		queryClient: client,
