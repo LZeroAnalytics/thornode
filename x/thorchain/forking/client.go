@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 
 	"gitlab.com/thorchain/thornode/v3/common"
+	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 )
@@ -207,13 +208,13 @@ func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height 
 }
 
 func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int64) ([]byte, error) {
-	req := &types.QueryNodesRequest{}
-	
+	req := &types.QueryNodesRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
 	resp, err := c.queryClient.Nodes(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC nodes query failed: %w", err)
 	}
-	
 	return c.codec.Marshal(resp)
 }
 
@@ -314,7 +315,9 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 }
 
 func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
-	req := &types.QueryPoolsRequest{}
+	req := &types.QueryPoolsRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
 	resp, err := c.queryClient.Pools(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC pools range query failed: %w", err)
@@ -368,19 +371,69 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 }
 
 func (c *remoteClient) getRangeViaNodesGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
-	req := &types.QueryNodesRequest{}
+	req := &types.QueryNodesRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
 	resp, err := c.queryClient.Nodes(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC nodes range query failed: %w", err)
 	}
-	
+
 	var kvPairs []KeyValue
-	for _, node := range resp.Nodes {
-		key := fmt.Sprintf("node/%s", node.NodeAddress)
-		value, _ := c.codec.Marshal(node)
+	for _, n := range resp.Nodes {
+		naAddr, err := common.NewAddress(n.NodeAddress)
+		if err != nil {
+			continue
+		}
+		accAddr, err := cosmos.AccAddressFromBech32(n.NodeAddress)
+		if err != nil {
+			continue
+		}
+		var status types.NodeStatus
+		switch strings.ToLower(n.Status) {
+		case "whitelisted":
+			status = types.NodeStatus_Whitelisted
+		case "standby":
+			status = types.NodeStatus_Standby
+		case "ready":
+			status = types.NodeStatus_Ready
+		case "active":
+			status = types.NodeStatus_Active
+		case "disabled":
+			status = types.NodeStatus_Disabled
+		default:
+			status = types.NodeStatus_Unknown
+		}
+
+		bond := sdkmath.NewUintFromString(n.TotalBond)
+		bondAddr, err := common.NewAddress(n.NodeOperatorAddress)
+		if err != nil {
+			bondAddr = common.NoAddress
+		}
+
+		record := types.NodeAccount{
+			NodeAddress:         accAddr,
+			Status:              status,
+			PubKeySet:           n.PubKeySet,
+			ValidatorConsPubKey: n.ValidatorConsPubKey,
+			Bond:                bond,
+			ActiveBlockHeight:   n.ActiveBlockHeight,
+			BondAddress:         bondAddr,
+			StatusSince:         n.StatusSince,
+			SignerMembership:    n.SignerMembership,
+			RequestedToLeave:    n.RequestedToLeave,
+			ForcedToLeave:       n.ForcedToLeave,
+			IPAddress:           n.IpAddress,
+			Version:             n.Version,
+			MissingBlocks:       uint64(n.MissingBlocks),
+			Maintenance:         n.Maintenance,
+		}
+
+		key := fmt.Sprintf("node_account/%s", naAddr.String())
+		value, _ := c.codec.Marshal(&record)
 		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
 	}
-	
+
 	return kvPairs, nil
 }
 
