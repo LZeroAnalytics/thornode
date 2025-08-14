@@ -163,6 +163,8 @@ func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int
 
 		return c.codec.Marshal(&record)
 	}
+}
+
 	
 	req := &types.QueryPoolsRequest{
 		Height: fmt.Sprintf("%d", height),
