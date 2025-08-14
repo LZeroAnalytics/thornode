@@ -92,19 +92,21 @@ func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []
 
 func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []byte, height int64) ([]byte, error) {
 	keyStr := string(key)
-	
+	lkey := strings.ToLower(keyStr)
+	lstore := strings.ToLower(storeKey)
+
 	switch {
-	case strings.Contains(keyStr, "mimir//"):
+	case strings.Contains(lkey, "mimir//"):
 		return c.fetchMimirData(ctx, keyStr, height)
-	case strings.Contains(keyStr, "ragnarok"):
+	case strings.Contains(lkey, "ragnarok"):
 		return c.fetchRagnarokData(ctx, height)
-	case strings.Contains(keyStr, "pool") || strings.Contains(storeKey, "pool"):
+	case strings.Contains(lkey, "pool/") || strings.Contains(lstore, "pool"):
 		return c.fetchPoolData(ctx, keyStr, height)
-	case strings.Contains(keyStr, "account") || strings.Contains(storeKey, "account"):
+	case strings.Contains(lkey, "account") || strings.Contains(lstore, "account"):
 		return c.fetchAccountData(ctx, keyStr, height)
-	case strings.Contains(keyStr, "balance") || strings.Contains(storeKey, "bank"):
+	case strings.Contains(lkey, "balance") || strings.Contains(lstore, "bank"):
 		return c.fetchBalanceData(ctx, keyStr, height)
-	case strings.Contains(keyStr, "node") || strings.Contains(storeKey, "node"):
+	case strings.Contains(lkey, "node_account") || strings.Contains(lstore, "node"):
 		return c.fetchNodeData(ctx, keyStr, height)
 	default:
 		return nil, nil
@@ -264,14 +266,24 @@ func (c *remoteClient) extractMimirKeyFromPath(key string) string {
 }
 
 func (c *remoteClient) extractAssetFromPoolKey(key string) string {
-	if !strings.HasPrefix(key, "pool/") {
+	lower := strings.ToLower(key)
+	idx := strings.Index(lower, "pool/")
+	if idx == -1 {
 		return ""
 	}
-	raw := strings.TrimPrefix(key, "pool/")
+	raw := key[idx+len("pool/"):]
+	raw = strings.TrimLeft(raw, "/")
+	if raw == "" {
+		return ""
+	}
 	if strings.Contains(raw, "/") {
 		parts := strings.Split(raw, "/")
 		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
-			return parts[0] + "." + strings.Join(parts[1:], "/")
+			right := strings.Join(parts[1:], "/")
+			if strings.HasPrefix(right, "0X") {
+				right = "0x" + strings.ToLower(right[2:])
+			}
+			return parts[0] + "." + right
 		}
 	}
 	return raw
@@ -376,7 +388,8 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 		}
 
 		assetPath := strings.ReplaceAll(asset.String(), ".", "/")
-		key := fmt.Sprintf("pool/%s", assetPath)
+		assetPathUpper := strings.ToUpper(assetPath)
+		key := fmt.Sprintf("pool//%s", assetPathUpper)
 		value, _ := c.codec.Marshal(&record)
 		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
 	}
