@@ -129,41 +129,51 @@ func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int
 				return nil, fmt.Errorf("invalid asset in pool response: %w", err)
 			}
 
-		br := sdkmath.NewUintFromString(single.BalanceRune)
-		ba := sdkmath.NewUintFromString(single.BalanceAsset)
-		lpu := sdkmath.NewUintFromString(single.LPUnits)
-		su := sdkmath.NewUintFromString(single.SynthUnits)
-		pir := sdkmath.NewUintFromString(single.PendingInboundRune)
-		pia := sdkmath.NewUintFromString(single.PendingInboundAsset)
+			br := sdkmath.NewUintFromString(single.BalanceRune)
+			ba := sdkmath.NewUintFromString(single.BalanceAsset)
+			lpu := sdkmath.NewUintFromString(single.LPUnits)
+			su := sdkmath.NewUintFromString(single.SynthUnits)
+			pir := sdkmath.NewUintFromString(single.PendingInboundRune)
+			pia := sdkmath.NewUintFromString(single.PendingInboundAsset)
 
-		var status types.PoolStatus
-		switch strings.ToLower(single.Status) {
-		case "available":
-			status = types.PoolStatus_Available
-		case "staged":
-			status = types.PoolStatus_Staged
-		case "suspended":
-			status = types.PoolStatus_Suspended
-		default:
-			status = types.PoolStatus_UnknownPoolStatus
+			var status types.PoolStatus
+			switch strings.ToLower(single.Status) {
+			case "available":
+				status = types.PoolStatus_Available
+			case "staged":
+				status = types.PoolStatus_Staged
+			case "suspended":
+				status = types.PoolStatus_Suspended
+			default:
+				status = types.PoolStatus_UnknownPoolStatus
+			}
+
+			record := types.Pool{
+				BalanceRune:         br,
+				BalanceAsset:        ba,
+				Asset:               asset,
+				LPUnits:             lpu,
+				Status:              status,
+				StatusSince:         0,
+				Decimals:            single.Decimals,
+				SynthUnits:          su,
+				PendingInboundRune:  pir,
+				PendingInboundAsset: pia,
+			}
+
+			return c.codec.Marshal(&record)
 		}
-
-		record := types.Pool{
-			BalanceRune:         br,
-			BalanceAsset:        ba,
-			Asset:               asset,
-			LPUnits:             lpu,
-			Status:              status,
-			StatusSince:         0,
-			Decimals:            single.Decimals,
-			SynthUnits:          su,
-			PendingInboundRune:  pir,
-			PendingInboundAsset: pia,
-		}
-
-		return c.codec.Marshal(&record)
+		return nil, nil
 	}
-}
+
+	req := &types.QueryPoolsRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
+	resp, err := c.queryClient.Pools(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC pools query failed: %w", err)
+	}
+	return c.codec.Marshal(resp)
 
 	
 	req := &types.QueryPoolsRequest{
@@ -263,10 +273,17 @@ func (c *remoteClient) extractMimirKeyFromPath(key string) string {
 }
 
 func (c *remoteClient) extractAssetFromPoolKey(key string) string {
-	if strings.HasPrefix(key, "pool/") {
-		return strings.TrimPrefix(key, "pool/")
+	if !strings.HasPrefix(key, "pool/") {
+		return ""
 	}
-	return ""
+	raw := strings.TrimPrefix(key, "pool/")
+	if strings.Contains(raw, "/") {
+		parts := strings.Split(raw, "/")
+		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0] + "." + strings.Join(parts[1:], "/")
+		}
+	}
+	return raw
 }
 
 func (c *remoteClient) extractAddressFromKey(key string) string {
@@ -367,7 +384,8 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 			PendingInboundAsset: pia,
 		}
 
-		key := fmt.Sprintf("pool/%s", asset.String())
+		assetPath := strings.ReplaceAll(asset.String(), ".", "/")
+		key := fmt.Sprintf("pool/%s", assetPath)
 		value, _ := c.codec.Marshal(&record)
 		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
 	}
