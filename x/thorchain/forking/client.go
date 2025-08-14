@@ -111,13 +111,62 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 }
 
 func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int64) ([]byte, error) {
+	assetStr := c.extractAssetFromPoolKey(key)
+	if assetStr != "" {
+		req := &types.QueryPoolRequest{
+			Asset:  assetStr,
+			Height: fmt.Sprintf("%d", height),
+		}
+		single, err := c.queryClient.Pool(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("gRPC pool query failed: %w", err)
+		}
+
+		asset, err := common.NewAsset(single.Asset)
+		if err != nil {
+			return nil, fmt.Errorf("invalid asset in pool response: %w", err)
+		}
+
+		br := sdkmath.NewUintFromString(single.BalanceRune)
+		ba := sdkmath.NewUintFromString(single.BalanceAsset)
+		lpu := sdkmath.NewUintFromString(single.LPUnits)
+		su := sdkmath.NewUintFromString(single.SynthUnits)
+		pir := sdkmath.NewUintFromString(single.PendingInboundRune)
+		pia := sdkmath.NewUintFromString(single.PendingInboundAsset)
+
+		var status types.PoolStatus
+		switch strings.ToLower(single.Status) {
+		case "available":
+			status = types.PoolStatus_Available
+		case "staged":
+			status = types.PoolStatus_Staged
+		case "suspended":
+			status = types.PoolStatus_Suspended
+		default:
+			status = types.PoolStatus_UnknownPoolStatus
+		}
+
+		record := types.Pool{
+			BalanceRune:         br,
+			BalanceAsset:        ba,
+			Asset:               asset,
+			LPUnits:             lpu,
+			Status:              status,
+			StatusSince:         0,
+			Decimals:            single.Decimals,
+			SynthUnits:          su,
+			PendingInboundRune:  pir,
+			PendingInboundAsset: pia,
+		}
+
+		return c.codec.Marshal(&record)
+	}
+
 	req := &types.QueryPoolsRequest{}
-	
 	resp, err := c.queryClient.Pools(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC pools query failed: %w", err)
 	}
-	
 	return c.codec.Marshal(resp)
 }
 
@@ -203,6 +252,20 @@ func (c *remoteClient) fetchRagnarokData(ctx context.Context, height int64) ([]b
 func (c *remoteClient) extractMimirKeyFromPath(key string) string {
 	if strings.HasPrefix(key, "mimir//") {
 		return strings.TrimPrefix(key, "mimir//")
+	}
+func (c *remoteClient) extractAssetFromPoolKey(key string) string {
+	if strings.HasPrefix(key, "pool/") {
+		return strings.TrimPrefix(key, "pool/")
+	}
+	return ""
+}
+
+	return ""
+}
+
+func (c *remoteClient) extractAssetFromPoolKey(key string) string {
+	if strings.HasPrefix(key, "pool/") {
+		return strings.TrimPrefix(key, "pool/")
 	}
 	return ""
 }
