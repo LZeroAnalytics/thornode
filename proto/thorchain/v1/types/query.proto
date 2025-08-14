@@ -79,7 +79,7 @@ service Query {
 
   // Returns the extended pool information for the provided asset.
   rpc Pool(QueryPoolRequest) returns (QueryPoolResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset}";
+    option (google.api.http).get = "/thorchain/pool/{asset=**}";
   }
 
   // Pools returns all extended pools
