@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	storepb "cosmossdk.io/api/cosmos/store/v1beta1"
+	sdkmath "cosmossdk.io/math"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protowire"
 
+	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 )
@@ -261,14 +263,51 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 	if err != nil {
 		return nil, fmt.Errorf("gRPC pools range query failed: %w", err)
 	}
-	
+
 	var kvPairs []KeyValue
-	for _, pool := range resp.Pools {
-		key := fmt.Sprintf("pool/%s", pool.Asset)
-		value, _ := c.codec.Marshal(pool)
+	for _, p := range resp.Pools {
+		asset, err := common.NewAsset(p.Asset)
+		if err != nil {
+			continue
+		}
+
+		br := sdkmath.NewUintFromString(p.BalanceRune)
+		ba := sdkmath.NewUintFromString(p.BalanceAsset)
+		lpu := sdkmath.NewUintFromString(p.LPUnits)
+		su := sdkmath.NewUintFromString(p.SynthUnits)
+		pir := sdkmath.NewUintFromString(p.PendingInboundRune)
+		pia := sdkmath.NewUintFromString(p.PendingInboundAsset)
+
+		var status types.PoolStatus
+		switch strings.ToLower(p.Status) {
+		case "available":
+			status = types.PoolStatus_Available
+		case "staged":
+			status = types.PoolStatus_Staged
+		case "suspended":
+			status = types.PoolStatus_Suspended
+		default:
+			status = types.PoolStatus_UnknownPoolStatus
+		}
+
+		record := types.Pool{
+			BalanceRune:         br,
+			BalanceAsset:        ba,
+			Asset:               asset,
+			LPUnits:             lpu,
+			Status:              status,
+			StatusSince:         0,
+			Decimals:            p.Decimals,
+			SynthUnits:          su,
+			PendingInboundRune:  pir,
+			PendingInboundAsset: pia,
+		}
+
+		key := fmt.Sprintf("pool/%s", asset.String())
+		value, _ := c.codec.Marshal(&record)
 		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
 	}
-	
+
 	return kvPairs, nil
 }
 
