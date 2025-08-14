@@ -18,6 +18,8 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
 )
 
 type remoteClient struct {
@@ -86,6 +88,20 @@ func NewRemoteClient(config RemoteConfig, cdc codec.Codec) (RemoteClient, error)
 	return cli, nil
 }
 
+func isNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if status.Code(err) == codes.NotFound {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "not found") || strings.Contains(msg, "doesn't exist") || strings.Contains(msg, "doesnt exist") {
+		return true
+	}
+	return false
+}
+
 func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []byte, height int64) ([]byte, error) {
 	return c.fetchViaGRPC(ctx, storeKey, key, height)
 }
@@ -132,6 +148,9 @@ func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int
 			}
 			single, err := c.queryClient.Pool(ctx, req)
 			if err != nil {
+				if isNotFoundErr(err) {
+					return nil, nil
+				}
 				return nil, fmt.Errorf("gRPC pool query failed: %w", err)
 			}
 
@@ -215,6 +234,9 @@ func (c *remoteClient) fetchLPData(ctx context.Context, key string, height int64
 	}
 	lpResp, err := c.queryClient.LiquidityProvider(ctx, req)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("gRPC liquidity provider query failed: %w", err)
 	}
 	asset, err := common.NewAsset(lpResp.Asset)
@@ -255,6 +277,9 @@ func (c *remoteClient) fetchSaverData(ctx context.Context, key string, height in
 	}
 	resp, err := c.queryClient.Saver(ctx, req)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("gRPC saver query failed: %w", err)
 	}
 	return c.codec.Marshal(resp)
@@ -292,6 +317,9 @@ func (c *remoteClient) fetchBorrowerData(ctx context.Context, key string, height
 	}
 	bResp, err := c.queryClient.Borrower(ctx, req)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("gRPC borrower query failed: %w", err)
 	}
 	asset, err := common.NewAsset(bResp.Asset)
@@ -397,6 +425,9 @@ func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int
 			}
 			single, err := c.queryClient.Node(ctx, req)
 			if err != nil {
+				if isNotFoundErr(err) {
+					return nil, nil
+				}
 				return nil, fmt.Errorf("gRPC node query failed: %w", err)
 			}
 			naAddr, err := common.NewAddress(single.NodeAddress)
