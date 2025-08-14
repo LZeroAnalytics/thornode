@@ -166,24 +166,24 @@ func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int
 		return nil, nil
 	}
 
-	req := &types.QueryPoolsRequest{
+	reqPools := &types.QueryPoolsRequest{
 		Height: fmt.Sprintf("%d", height),
 	}
-	resp, err := c.queryClient.Pools(ctx, req)
+	respPools, err := c.queryClient.Pools(ctx, reqPools)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC pools query failed: %w", err)
 	}
-	return c.codec.Marshal(resp)
+	return c.codec.Marshal(respPools)
 
 	
-	req := &types.QueryPoolsRequest{
+	reqPools := &types.QueryPoolsRequest{
 		Height: fmt.Sprintf("%d", height),
 	}
-	resp, err := c.queryClient.Pools(ctx, req)
+	respPools, err := c.queryClient.Pools(ctx, reqPools)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC pools query failed: %w", err)
 	}
-	return c.codec.Marshal(resp)
+	return c.codec.Marshal(respPools)
 }
 
 func (c *remoteClient) fetchAccountData(ctx context.Context, key string, height int64) ([]byte, error) {
