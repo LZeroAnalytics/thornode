@@ -253,6 +253,9 @@ func (c *remoteClient) extractMimirKeyFromPath(key string) string {
 	if strings.HasPrefix(key, "mimir//") {
 		return strings.TrimPrefix(key, "mimir//")
 	}
+	return ""
+}
+
 func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 	if strings.HasPrefix(key, "pool/") {
 		return strings.TrimPrefix(key, "pool/")
