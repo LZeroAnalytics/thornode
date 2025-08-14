@@ -263,16 +263,6 @@ func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 	return ""
 }
 
-	return ""
-}
-
-func (c *remoteClient) extractAssetFromPoolKey(key string) string {
-	if strings.HasPrefix(key, "pool/") {
-		return strings.TrimPrefix(key, "pool/")
-	}
-	return ""
-}
-
 func (c *remoteClient) extractAddressFromKey(key string) string {
 	parts := strings.Split(key, "/")
 	if len(parts) > 1 {
