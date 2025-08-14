@@ -116,7 +116,10 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int64) ([]byte, error) {
 	assetStr := c.extractAssetFromPoolKey(key)
 	if assetStr != "" {
-		if _, err := common.NewAsset(assetStr); err == nil {
+		if a, err := common.NewAsset(assetStr); err == nil {
+			if strings.EqualFold(a.Chain.String(), "THOR") {
+				return nil, nil
+			}
 			req := &types.QueryPoolRequest{
 				Asset:  assetStr,
 				Height: fmt.Sprintf("%d", height),
