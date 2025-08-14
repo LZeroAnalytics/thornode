@@ -354,18 +354,18 @@ func NewChainApp(
 	)
 
 	var thorchainStoreService corestore.KVStoreService
-	forkingRPC := cast.ToString(appOpts.Get("fork.rpc"))
+	forkingGRPC := cast.ToString(appOpts.Get("fork.grpc"))
 	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
-	forkingEnabled := forkingRPC != "" && forkingChainID != ""
+	forkingEnabled := forkingGRPC != "" && forkingChainID != ""
 
 	var forkingConfig forking.RemoteConfig
 	var remoteClient forking.RemoteClient
 	var wasmForkingService forking.ForkingKVStoreService
 
 	if forkingEnabled {
-		logger.Info("Forking enabled", "rpc", forkingRPC, "chain_id", forkingChainID)
+		logger.Info("Forking enabled", "grpc", forkingGRPC, "chain_id", forkingChainID)
 		forkingConfig = forking.RemoteConfig{
-			RPC:             forkingRPC,
+			GRPC:            forkingGRPC,
 			ChainID:         forkingChainID,
 			ForkHeight:      cast.ToInt64(appOpts.Get("fork.height")),
 			TrustHeight:     cast.ToInt64(appOpts.Get("fork.trust-height")),

@@ -8,7 +8,7 @@ import (
 )
 
 type RemoteConfig struct {
-	RPC             string
+	GRPC            string
 	ChainID         string
 	ForkHeight      int64
 	TrustHeight     int64
