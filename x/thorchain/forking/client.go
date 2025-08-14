@@ -357,11 +357,12 @@ func (c *remoteClient) extractBorrowerFromKey(key string) (string, string) {
 func (c *remoteClient) normalizeAssetFromKeyAsset(s string) string {
 	if strings.Contains(s, "/") {
 		parts := strings.SplitN(s, "/", 2)
+		left := parts[0]
 		right := parts[1]
-		if strings.HasPrefix(right, "0X") {
-			right = "0x" + strings.ToLower(right[2:])
+		if strings.HasPrefix(right, "0x") || strings.HasPrefix(right, "0X") {
+			right = "0X" + strings.ToUpper(right[2:])
 		}
-		return parts[0] + "/" + right
+		return left + "." + right
 	}
 	return s
 }
@@ -516,7 +517,7 @@ func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 		if strings.HasPrefix(right, "0x") || strings.HasPrefix(right, "0X") {
 			right = "0X" + strings.ToUpper(right[2:])
 		}
-		return parts[0] + "/" + right
+		return parts[0] + "." + right
 	}
 	return raw
 }
