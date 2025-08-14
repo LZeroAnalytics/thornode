@@ -102,10 +102,6 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		return c.fetchRagnarokData(ctx, height)
 	case strings.Contains(lkey, "pool/") || strings.Contains(lstore, "pool"):
 		return c.fetchPoolData(ctx, keyStr, height)
-	case strings.Contains(lkey, "lp/"):
-		return c.fetchLPData(ctx, keyStr, height)
-	case strings.Contains(lkey, "loan/"):
-		return c.fetchBorrowerData(ctx, keyStr, height)
 	case strings.Contains(lkey, "account") || strings.Contains(lstore, "account"):
 		return c.fetchAccountData(ctx, keyStr, height)
 	case strings.Contains(lkey, "balance") || strings.Contains(lstore, "bank"):
@@ -197,105 +193,6 @@ func (c *remoteClient) fetchAccountData(ctx context.Context, key string, height 
 	}
 	
 	resp, err := c.queryClient.Account(ctx, req)
-func (c *remoteClient) fetchLPData(ctx context.Context, key string, height int64) ([]byte, error) {
-	assetPart, addr := c.extractLPFromKey(key)
-	if assetPart == "" || addr == "" {
-		return nil, nil
-	}
-
-	assetStr := assetPart
-	if strings.Contains(assetPart, "/") && !strings.Contains(assetPart, ".") {
-		parts := strings.Split(assetPart, "/")
-		if len(parts) >= 2 {
-			right := strings.Join(parts[1:], "/")
-			if strings.HasPrefix(right, "0X") {
-				right = "0x" + strings.ToLower(right[2:])
-			}
-			assetStr = parts[0] + "." + right
-		}
-	}
-
-	req := &types.QueryLiquidityProviderRequest{
-		Asset:   assetStr,
-		Address: addr,
-		Height:  fmt.Sprintf("%d", height),
-	}
-	lpResp, err := c.queryClient.LiquidityProvider(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC liquidity provider query failed: %w", err)
-	}
-
-	asset, err := common.NewAsset(lpResp.Asset)
-	if err != nil {
-		return nil, fmt.Errorf("invalid asset in LP response: %w", err)
-	}
-	rAddr, _ := common.NewAddress(lpResp.RuneAddress)
-	aAddr, _ := common.NewAddress(lpResp.AssetAddress)
-
-	record := types.LiquidityProvider{
-		Asset:             asset,
-		RuneAddress:       rAddr,
-		AssetAddress:      aAddr,
-		LastAddHeight:     lpResp.LastAddHeight,
-		LastWithdrawHeight: lpResp.LastWithdrawHeight,
-		Units:             sdkmath.NewUintFromString(lpResp.Units),
-		PendingRune:       sdkmath.NewUintFromString(lpResp.PendingRune),
-		PendingAsset:      sdkmath.NewUintFromString(lpResp.PendingAsset),
-		PendingTxID:       lpResp.PendingTxId,
-		RuneDepositValue:  sdkmath.NewUintFromString(lpResp.RuneDepositValue),
-		AssetDepositValue: sdkmath.NewUintFromString(lpResp.AssetDepositValue),
-	}
-
-	return c.codec.Marshal(&record)
-}
-
-func (c *remoteClient) fetchBorrowerData(ctx context.Context, key string, height int64) ([]byte, error) {
-	assetPart, addr := c.extractBorrowerFromKey(key)
-	if assetPart == "" || addr == "" {
-		return nil, nil
-	}
-
-	assetStr := assetPart
-	if strings.Contains(assetPart, "/") && !strings.Contains(assetPart, ".") {
-		parts := strings.Split(assetPart, "/")
-		if len(parts) >= 2 {
-			right := strings.Join(parts[1:], "/")
-			if strings.HasPrefix(right, "0X") {
-				right = "0x" + strings.ToLower(right[2:])
-			}
-			assetStr = parts[0] + "." + right
-		}
-	}
-
-	req := &types.QueryBorrowerRequest{
-		Asset:   assetStr,
-		Address: addr,
-		Height:  fmt.Sprintf("%d", height),
-	}
-	bResp, err := c.queryClient.Borrower(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC borrower query failed: %w", err)
-	}
-
-	owner, _ := common.NewAddress(bResp.Owner)
-	asset, err := common.NewAsset(bResp.Asset)
-	if err != nil {
-		return nil, fmt.Errorf("invalid asset in borrower response: %w", err)
-	}
-
-	record := types.Loan{
-		Owner:               owner,
-		Asset:               asset,
-		DebtIssued:          sdkmath.NewUintFromString(bResp.DebtIssued),
-		DebtRepaid:          sdkmath.NewUintFromString(bResp.DebtRepaid),
-		LastOpenHeight:      bResp.LastOpenHeight,
-		CollateralDeposited: sdkmath.NewUintFromString(bResp.CollateralDeposited),
-		CollateralWithdrawn: sdkmath.NewUintFromString(bResp.CollateralWithdrawn),
-	}
-
-	return c.codec.Marshal(&record)
-}
-
 	if err != nil {
 		return nil, fmt.Errorf("gRPC account query failed: %w", err)
 	}
@@ -322,69 +219,6 @@ func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height 
 }
 
 func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int64) ([]byte, error) {
-	addr := c.extractAddressAfterPrefix(key, "node_account/")
-	if addr != "" {
-		req := &types.QueryNodeRequest{
-			Address: addr,
-			Height:  fmt.Sprintf("%d", height),
-		}
-		single, err := c.queryClient.Node(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("gRPC node query failed: %w", err)
-		}
-
-		naAddr, err := common.NewAddress(single.NodeAddress)
-		if err != nil {
-			return nil, fmt.Errorf("invalid node address: %w", err)
-		}
-		accAddr, err := cosmos.AccAddressFromBech32(single.NodeAddress)
-		if err != nil {
-			return nil, fmt.Errorf("invalid bech32 node address: %w", err)
-		}
-
-		var status types.NodeStatus
-		switch strings.ToLower(single.Status) {
-		case "whitelisted":
-			status = types.NodeStatus_Whitelisted
-		case "standby":
-			status = types.NodeStatus_Standby
-		case "ready":
-			status = types.NodeStatus_Ready
-		case "active":
-			status = types.NodeStatus_Active
-		case "disabled":
-			status = types.NodeStatus_Disabled
-		default:
-			status = types.NodeStatus_Unknown
-		}
-
-		bond := sdkmath.NewUintFromString(single.TotalBond)
-		bondAddr, err := common.NewAddress(single.NodeOperatorAddress)
-		if err != nil {
-			bondAddr = common.NoAddress
-		}
-
-		record := types.NodeAccount{
-			NodeAddress:         accAddr,
-			Status:              status,
-			PubKeySet:           single.PubKeySet,
-			ValidatorConsPubKey: single.ValidatorConsPubKey,
-			Bond:                bond,
-			ActiveBlockHeight:   single.ActiveBlockHeight,
-			BondAddress:         bondAddr,
-			StatusSince:         single.StatusSince,
-			SignerMembership:    single.SignerMembership,
-			RequestedToLeave:    single.RequestedToLeave,
-			ForcedToLeave:       single.ForcedToLeave,
-			IPAddress:           single.IpAddress,
-			Version:             single.Version,
-			MissingBlocks:       uint64(single.MissingBlocks),
-			Maintenance:         single.Maintenance,
-		}
-
-		return c.codec.Marshal(&record)
-	}
-
 	req := &types.QueryNodesRequest{
 		Height: fmt.Sprintf("%d", height),
 	}
@@ -396,78 +230,6 @@ func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int
 }
 
 func (c *remoteClient) fetchMimirData(ctx context.Context, key string, height int64) ([]byte, error) {
-func (c *remoteClient) extractAddressAfterPrefix(key string, prefix string) string {
-	lower := strings.ToLower(key)
-	idx := strings.Index(lower, strings.ToLower(prefix))
-	if idx == -1 {
-		return ""
-	}
-	raw := key[idx+len(prefix):]
-	raw = strings.TrimLeft(raw, "/")
-	if raw == "" {
-		return ""
-	}
-	parts := strings.Split(raw, "/")
-	for _, p := range parts {
-		if p != "" {
-			return p
-		}
-	}
-	return ""
-}
-
-func (c *remoteClient) extractLPFromKey(key string) (string, string) {
-	lower := strings.ToLower(key)
-	idx := strings.Index(lower, "lp/")
-	if idx == -1 {
-		return "", ""
-	}
-	raw := key[idx+len("lp/"):]
-	raw = strings.TrimLeft(raw, "/")
-	if raw == "" {
-		return "", ""
-	}
-	parts := strings.Split(raw, "/")
-	nonEmpty := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p != "" {
-			nonEmpty = append(nonEmpty, p)
-		}
-	}
-	if len(nonEmpty) < 2 {
-		return "", ""
-	}
-	asset := nonEmpty[0]
-	addr := nonEmpty[1]
-	return asset, addr
-}
-
-func (c *remoteClient) extractBorrowerFromKey(key string) (string, string) {
-	lower := strings.ToLower(key)
-	idx := strings.Index(lower, "loan/")
-	if idx == -1 {
-		return "", ""
-	}
-	raw := key[idx+len("loan/"):]
-	raw = strings.TrimLeft(raw, "/")
-	if raw == "" {
-		return "", ""
-	}
-	parts := strings.Split(raw, "/")
-	nonEmpty := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p != "" {
-			nonEmpty = append(nonEmpty, p)
-		}
-	}
-	if len(nonEmpty) < 2 {
-		return "", ""
-	}
-	asset := nonEmpty[0]
-	addr := nonEmpty[1]
-	return asset, addr
-}
-
 	mimirKey := c.extractMimirKeyFromPath(key)
 	if mimirKey == "" {
 		return nil, nil
@@ -532,10 +294,8 @@ func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 
 func (c *remoteClient) extractAddressFromKey(key string) string {
 	parts := strings.Split(key, "/")
-	for _, p := range parts {
-		if p != "" && p != "node_account" && p != "account" && p != "balance" {
-			return p
-		}
+	if len(parts) > 1 {
+		return parts[1]
 	}
 	return ""
 }
