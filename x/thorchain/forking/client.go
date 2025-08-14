@@ -239,6 +239,10 @@ func (c *remoteClient) fetchLPData(ctx context.Context, key string, height int64
 		PendingAsset:       sdkmath.NewUintFromString(lpResp.PendingAsset),
 		RuneDepositValue:   sdkmath.NewUintFromString(lpResp.RuneDepositValue),
 		AssetDepositValue:  sdkmath.NewUintFromString(lpResp.AssetDepositValue),
+	}
+	return c.codec.Marshal(&record)
+}
+
 func (c *remoteClient) fetchSaverData(ctx context.Context, key string, height int64) ([]byte, error) {
 	assetStr, addr := c.extractSaverFromKey(key)
 	if assetStr == "" || addr == "" {
@@ -274,10 +278,6 @@ func (c *remoteClient) extractSaverFromKey(key string) (string, string) {
 	addr := raw[last+1:]
 	assetPart = c.normalizeAssetFromKeyAsset(assetPart)
 	return assetPart, addr
-}
-
-	}
-	return c.codec.Marshal(&record)
 }
 
 func (c *remoteClient) fetchBorrowerData(ctx context.Context, key string, height int64) ([]byte, error) {
