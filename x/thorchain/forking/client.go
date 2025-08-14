@@ -46,6 +46,10 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 	keyStr := string(key)
 	
 	switch {
+	case strings.Contains(keyStr, "mimir//"):
+		return c.fetchMimirData(ctx, keyStr, height)
+	case strings.Contains(keyStr, "ragnarok"):
+		return c.fetchRagnarokData(ctx, height)
 	case strings.Contains(keyStr, "pool") || strings.Contains(storeKey, "pool"):
 		return c.fetchPoolData(ctx, keyStr, height)
 	case strings.Contains(keyStr, "account") || strings.Contains(storeKey, "account"):
@@ -115,6 +119,45 @@ func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int
 	}
 	
 	return c.codec.Marshal(resp)
+}
+
+func (c *remoteClient) fetchMimirData(ctx context.Context, key string, height int64) ([]byte, error) {
+	mimirKey := c.extractMimirKeyFromPath(key)
+	if mimirKey == "" {
+		return nil, nil
+	}
+	
+	req := &types.QueryMimirWithKeyRequest{
+		Key:    mimirKey,
+		Height: fmt.Sprintf("%d", height),
+	}
+	
+	resp, err := c.queryClient.MimirWithKey(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC mimir query failed: %w", err)
+	}
+	
+	return c.codec.Marshal(resp)
+}
+
+func (c *remoteClient) fetchRagnarokData(ctx context.Context, height int64) ([]byte, error) {
+	req := &types.QueryRagnarokRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
+	
+	resp, err := c.queryClient.Ragnarok(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC ragnarok query failed: %w", err)
+	}
+	
+	return c.codec.Marshal(resp)
+}
+
+func (c *remoteClient) extractMimirKeyFromPath(key string) string {
+	if strings.HasPrefix(key, "mimir//") {
+		return strings.TrimPrefix(key, "mimir//")
+	}
+	return ""
 }
 
 func (c *remoteClient) extractAddressFromKey(key string) string {
