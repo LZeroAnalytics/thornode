@@ -390,9 +390,7 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 			PendingInboundAsset: pia,
 		}
 
-		assetPath := strings.ReplaceAll(asset.String(), ".", "/")
-		assetPathUpper := strings.ToUpper(assetPath)
-		key := fmt.Sprintf("pool//%s", assetPathUpper)
+		key := fmt.Sprintf("pool//%s", strings.ToUpper(asset.String()))
 		value, _ := c.codec.Marshal(&record)
 		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
 	}
