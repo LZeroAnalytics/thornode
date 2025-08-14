@@ -226,6 +226,25 @@ func (c *remoteClient) GetLatestHeight(ctx context.Context) (int64, error) {
 }
 
 func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end []byte, height int64) ([]KeyValue, error) {
+	if storeKey == "thorchain" {
+		if len(start) > 0 {
+			if strings.HasPrefix(string(start), "pool/") {
+				return c.getRangeViaPoolsGRPC(ctx, height)
+			}
+			if strings.HasPrefix(string(start), "node_account/") {
+				return c.getRangeViaNodesGRPC(ctx, height)
+			}
+		}
+		if len(end) > 0 {
+			if strings.HasPrefix(string(end), "pool/") {
+				return c.getRangeViaPoolsGRPC(ctx, height)
+			}
+			if strings.HasPrefix(string(end), "node_account/") {
+				return c.getRangeViaNodesGRPC(ctx, height)
+			}
+		}
+	}
+
 	switch storeKey {
 	case "pools":
 		return c.getRangeViaPoolsGRPC(ctx, height)
