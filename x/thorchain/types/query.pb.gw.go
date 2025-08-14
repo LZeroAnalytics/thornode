@@ -8057,7 +8057,7 @@ var (
 
 	pattern_Query_Export_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"thorchain", "export"}, "", runtime.AssumeColonVerbOpt(false)))
 
-	pattern_Query_Pool_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"thorchain", "pool", "asset"}, "", runtime.AssumeColonVerbOpt(false)))
+	pattern_Query_Pool_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 3, 0, 4, 1, 5, 2}, []string{"thorchain", "pool", "asset"}, "", runtime.AssumeColonVerbOpt(false)))
 
 	pattern_Query_Pools_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"thorchain", "pools"}, "", runtime.AssumeColonVerbOpt(false)))
 
