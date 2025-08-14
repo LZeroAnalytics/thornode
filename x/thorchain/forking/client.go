@@ -114,19 +114,20 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int64) ([]byte, error) {
 	assetStr := c.extractAssetFromPoolKey(key)
 	if assetStr != "" {
-		req := &types.QueryPoolRequest{
-			Asset:  assetStr,
-			Height: fmt.Sprintf("%d", height),
-		}
-		single, err := c.queryClient.Pool(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("gRPC pool query failed: %w", err)
-		}
+		if _, err := common.NewAsset(assetStr); err == nil {
+			req := &types.QueryPoolRequest{
+				Asset:  assetStr,
+				Height: fmt.Sprintf("%d", height),
+			}
+			single, err := c.queryClient.Pool(ctx, req)
+			if err != nil {
+				return nil, fmt.Errorf("gRPC pool query failed: %w", err)
+			}
 
-		asset, err := common.NewAsset(single.Asset)
-		if err != nil {
-			return nil, fmt.Errorf("invalid asset in pool response: %w", err)
-		}
+			asset, err := common.NewAsset(single.Asset)
+			if err != nil {
+				return nil, fmt.Errorf("invalid asset in pool response: %w", err)
+			}
 
 		br := sdkmath.NewUintFromString(single.BalanceRune)
 		ba := sdkmath.NewUintFromString(single.BalanceAsset)
@@ -162,8 +163,10 @@ func (c *remoteClient) fetchPoolData(ctx context.Context, key string, height int
 
 		return c.codec.Marshal(&record)
 	}
-
-	req := &types.QueryPoolsRequest{}
+	
+	req := &types.QueryPoolsRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
 	resp, err := c.queryClient.Pools(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC pools query failed: %w", err)
