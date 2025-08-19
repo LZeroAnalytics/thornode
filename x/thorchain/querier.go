@@ -1333,6 +1333,33 @@ func (qs queryServer) queryPool(ctx cosmos.Context, req *types.QueryPoolRequest)
 	if len(req.Asset) == 0 {
 		return nil, errors.New("asset not provided")
 	}
+	if strings.Contains(req.Asset, "/") {
+		parts := strings.SplitN(req.Asset, "/", 2)
+		if len(parts) == 2 && (strings.HasPrefix(parts[1], "0x") || strings.HasPrefix(parts[1], "0X")) {
+			chainStr := parts[0]
+			addr := parts[1]
+			if strings.HasPrefix(addr, "0x") {
+				addr = "0X" + strings.ToUpper(addr[2:])
+			}
+			iter := qs.mgr.Keeper().GetPoolIterator(ctx)
+			defer iter.Close()
+			for ; iter.Valid(); iter.Next() {
+				var p Pool
+				if err := qs.mgr.Keeper().Cdc().Unmarshal(iter.Value(), &p); err != nil {
+					continue
+				}
+				if p.Asset.Chain.String() != chainStr {
+					continue
+				}
+				sym := p.Asset.Symbol.String()
+				if strings.HasSuffix(sym, "-"+addr) {
+					req.Asset = p.Asset.String()
+					break
+				}
+			}
+		}
+	}
+
 	asset, err := common.NewAsset(req.Asset)
 	if err != nil {
 		ctx.Logger().Error("fail to parse asset", "error", err)
