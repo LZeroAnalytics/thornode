@@ -73,6 +73,10 @@ func (c *Converter) GetRate(symbol string, metrics bool) (*big.Float, *big.Float
 		c.metrics.UpdateProviderBounds(symbol, upperBound, lowerBound)
 	}
 
+	if len(rates) == 0 {
+		return nil, nil, fmt.Errorf("no rates found")
+	}
+
 	volume := new(big.Float)
 
 	prices := map[string]*big.Float{}
