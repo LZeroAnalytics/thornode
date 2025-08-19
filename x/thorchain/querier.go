@@ -1338,9 +1338,16 @@ func (qs queryServer) queryPool(ctx cosmos.Context, req *types.QueryPoolRequest)
 		if len(parts) == 2 && (strings.HasPrefix(parts[1], "0x") || strings.HasPrefix(parts[1], "0X")) {
 			chainStr := parts[0]
 			addr := parts[1]
-			if strings.HasPrefix(addr, "0x") {
-				addr = "0X" + strings.ToUpper(addr[2:])
+
+			addrUpper := addr
+			if strings.HasPrefix(addrUpper, "0x") {
+				addrUpper = "0X" + strings.ToUpper(addrUpper[2:])
 			}
+			addrLower := addr
+			if strings.HasPrefix(addrLower, "0X") {
+				addrLower = "0x" + strings.ToLower(addrLower[2:])
+			}
+
 			iter := qs.mgr.Keeper().GetPoolIterator(ctx)
 			defer iter.Close()
 			for ; iter.Valid(); iter.Next() {
@@ -1352,9 +1359,16 @@ func (qs queryServer) queryPool(ctx cosmos.Context, req *types.QueryPoolRequest)
 					continue
 				}
 				sym := p.Asset.Symbol.String()
-				if strings.HasSuffix(sym, "-"+addr) {
+				if strings.HasSuffix(sym, "-"+addrUpper) {
 					req.Asset = p.Asset.String()
 					break
+				}
+				if i := strings.LastIndex(sym, "-"); i > 0 {
+					contract := sym[i+1:]
+					if strings.EqualFold(contract, addr) || strings.EqualFold(contract, addrUpper) || strings.EqualFold(contract, addrLower) {
+						req.Asset = p.Asset.String()
+						break
+					}
 				}
 			}
 		}
