@@ -96,27 +96,45 @@ service Query {
   }
 
   rpc LiquidityProvider(QueryLiquidityProviderRequest) returns (QueryLiquidityProviderResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset=**}/liquidity_provider/{address}";
+    option (google.api.http) = {
+      get: "/thorchain/pool/{asset=**}/liquidity_provider/{address}";
+      additional_bindings: { get: "/thorchain/liquidity_provider/{asset=**}/{address}" }
+    };
   }
 
   rpc LiquidityProviders(QueryLiquidityProvidersRequest) returns (QueryLiquidityProvidersResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset=**}/liquidity_providers";
+    option (google.api.http) = {
+      get: "/thorchain/pool/{asset=**}/liquidity_providers";
+      additional_bindings: { get: "/thorchain/liquidity_providers/{asset=**}" }
+    };
   }
 
   rpc Saver(QuerySaverRequest) returns (QuerySaverResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset=**}/saver/{address}";
+    option (google.api.http) = {
+      get: "/thorchain/pool/{asset=**}/saver/{address}";
+      additional_bindings: { get: "/thorchain/saver/{asset=**}/{address}" }
+    };
   }
 
   rpc Savers(QuerySaversRequest) returns (QuerySaversResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset=**}/savers";
+    option (google.api.http) = {
+      get: "/thorchain/pool/{asset=**}/savers";
+      additional_bindings: { get: "/thorchain/savers/{asset=**}" }
+    };
   }
 
   rpc Borrower(QueryBorrowerRequest) returns (QueryBorrowerResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset=**}/borrower/{address}";
+    option (google.api.http) = {
+      get: "/thorchain/pool/{asset=**}/borrower/{address}";
+      additional_bindings: { get: "/thorchain/borrower/{asset=**}/{address}" }
+    };
   }
 
   rpc Borrowers(QueryBorrowersRequest) returns (QueryBorrowersResponse) {
-    option (google.api.http).get = "/thorchain/pool/{asset=**}/borrowers";
+    option (google.api.http) = {
+      get: "/thorchain/pool/{asset=**}/borrowers";
+      additional_bindings: { get: "/thorchain/borrowers/{asset=**}" }
+    };
   }
 
   rpc TradeUnit(QueryTradeUnitRequest) returns (QueryTradeUnitResponse) {
