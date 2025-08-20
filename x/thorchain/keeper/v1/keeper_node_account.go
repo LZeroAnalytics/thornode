@@ -518,7 +518,7 @@ func (k KVStore) DeductNativeTxFeeFromBond(ctx cosmos.Context, nodeAddr cosmos.A
 		return err
 	}
 	if na.Bond.LT(fee) {
-		return fmt.Errorf("not enound bond for fee")
+		return fmt.Errorf("not enough bond for fee")
 	}
 	na.Bond = common.SafeSub(na.Bond, fee)
 	if err = k.SetNodeAccount(ctx, na); err != nil {
