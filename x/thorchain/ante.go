@@ -34,6 +34,36 @@ func NewAnteDecorator(keeper keeper.Keeper) AnteDecorator {
 	}
 }
 
+// MimirBypassDecorator checks for MsgMimir early and bypasses all ante handlers
+type MimirBypassDecorator struct {
+	keeper keeper.Keeper
+}
+
+func NewMimirBypassDecorator(keeper keeper.Keeper) MimirBypassDecorator {
+	return MimirBypassDecorator{
+		keeper: keeper,
+	}
+}
+
+func (mbd MimirBypassDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (sdk.Context, error) {
+	// Check if this transaction contains a MsgMimir
+	for _, msg := range tx.GetMsgs() {
+		if m, ok := msg.(*types.MsgMimir); ok {
+			// Validate mimir authority
+			if _, err := validateMimirAuth(ctx, mbd.keeper, *m); err != nil {
+				return ctx, err
+			}
+			// Set gas meter to infinite to bypass gas checks
+			ctx = ctx.WithGasMeter(storetypes.NewInfiniteGasMeter())
+			// Skip ALL remaining ante handlers - go straight to message handling
+			// This bypasses all fee deduction
+			return ctx, nil
+		}
+	}
+	// Not a MsgMimir, continue normal flow
+	return next(ctx, tx, simulate)
+}
+
 func (ad AnteDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (newCtx sdk.Context, err error) {
 	if err = ad.rejectMultipleDepositMsgs(tx.GetMsgs()); err != nil {
 		return ctx, err

@@ -57,6 +57,9 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		// must be first to ensure that injected txs bypass the remaining ante handlers, as they do not have gas.
 		ebifrost.NewInjectedTxDecorator(),
 
+		// Check for MsgMimir early and skip fee deduction
+		thorchain.NewMimirBypassDecorator(options.THORChainKeeper),
+
 		ante.NewSetUpContextDecorator(), // outermost AnteDecorator. SetUpContext must be called first
 
 		// replace gas meter immediately after setting up ctx
