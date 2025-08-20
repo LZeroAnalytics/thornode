@@ -331,12 +331,7 @@ func RedistributePercentage(
 	values map[string]*big.Float,
 	amount, cap *big.Float,
 ) map[string]*big.Float {
-	total := new(big.Float)
 	remain := new(big.Float)
-
-	for _, value := range values {
-		total.Add(total, value)
-	}
 
 	percentages := ComputePercentage(values)
 	capped := map[string]*big.Float{}
