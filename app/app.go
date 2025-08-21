@@ -244,10 +244,9 @@ func NewChainApp(
 	bApp.SetTxEncoder(ec.TxConfig.TxEncoder())
 
 	keys := storetypes.NewKVStoreKeys(
-		authtypes.StoreKey, banktypes.StoreKey,
 		authtypes.StoreKey,
-		authzkeeper.StoreKey,
 		banktypes.StoreKey,
+		authzkeeper.StoreKey,
 		stakingtypes.StoreKey,
 		minttypes.StoreKey,
 		paramstypes.StoreKey,
