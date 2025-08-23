@@ -24,20 +24,25 @@ RUN make install
 ########################################################################################
 
 FROM debian:bullseye-20241111-slim@sha256:60a596681410bd31a48e5975806a24cd78328f3fd6b9ee5bc64dca6d46a51f29
+ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && \
-  apt-get install -y --no-install-recommends \
-  ca-certificates=20210119 \
-  curl=7.74.0-1.3+deb11u15 \
-  jq=1.6-2.1 \
-  libffi-dev=3.3-6 \
-  libssl-dev=1.1.1w-0+deb11u3 \
-  openssl=1.1.1w-0+deb11u3 \
-  procps=2:3.3.17-5 \
-  python3=3.9.2-3 \
-  python3-pip=20.3.4-4+deb11u1 && \
-  rm -rf /var/lib/apt/lists/* && \
-  pip3 install --no-cache-dir requests==2.32.3 web3==7.5.0 retry==0.9.2
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+RUN set -eux; \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        jq \
+        libffi-dev \
+        libssl-dev \
+        openssl \
+        procps \
+        python3 \
+        python3-pip; \
+    rm -rf /var/lib/apt/lists/*; \
+    pip3 install --no-cache-dir requests==2.32.3 web3==7.5.0 retry==0.9.2
 
 # Copy the compiled binaries over.
 COPY --from=build /go/bin/thornode /go/bin/bifrost /go/bin/recover-keyshare-backup /usr/bin/
