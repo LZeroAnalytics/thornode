@@ -70,19 +70,10 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		}
 	}
 
-	authority := app.WasmKeeper.GetAuthority()
-	msgSrv := wasmkeeper.NewMsgServerImpl(&app.WasmKeeper)
-
-	_, _ = msgSrv.UnpinCodes(sdk.WrapSDKContext(ctx), &wasmtypes.MsgUnpinCodes{
-		Authority: authority,
-		CodeIDs:   []uint64{codeID},
-	})
-
-	if _, pinErr := msgSrv.PinCodes(sdk.WrapSDKContext(ctx), &wasmtypes.MsgPinCodes{
-		Authority: authority,
-		CodeIDs:   []uint64{codeID},
-	}); pinErr != nil {
-		return pinErr
+	pk := wasmkeeper.NewGovPermissionKeeper(app.WasmKeeper)
+	_ = pk.UnpinCode(ctx, codeID)
+	if err := pk.PinCode(ctx, codeID); err != nil {
+		return err
 	}
 	return nil
 }
