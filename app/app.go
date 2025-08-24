@@ -163,6 +163,7 @@ type THORChainApp struct {
 	DenomKeeper      denomkeeper.Keeper
 	msgServiceRouter *MsgServiceRouter // router for redirecting Msg service messages
 	WasmKeeper       wasmkeeper.Keeper
+	wasmDir          string
 
 	// forking services
 	forkingServices []forking.ForkingKVStoreService
@@ -492,6 +493,7 @@ func NewChainApp(
 	)
 
 	wasmDir := filepath.Join(homePath, "data") // "wasm" subdirectory created here
+	app.wasmDir = wasmDir
 	wasmConfig, err := wasm.ReadWasmConfig(appOpts)
 	if err != nil {
 		panic(fmt.Sprintf("error while reading wasm config: %s", err))
@@ -549,6 +551,7 @@ func NewChainApp(
 
 	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
+	app.msgServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Msg", NewWasmMsgWrapper(app, &app.WasmKeeper, wasmkeeper.NewMsgServerImpl(&app.WasmKeeper)))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
 
@@ -670,9 +673,9 @@ func NewChainApp(
 
 	// Uncomment if you want to set a custom migration order here.
 	// app.ModuleManager.SetOrderMigrations(custom order)
-
 	app.queryServiceRouter = NewQueryServiceRouter(app.BaseApp.GRPCQueryRouter())
 	app.queryServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Query", NewBankQueryWrapper(app.BankKeeper))
+	app.queryServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Query", NewWasmQueryWrapper(app, &app.WasmKeeper, &app.WasmKeeper))
 	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.queryServiceRouter)
 	err = app.ModuleManager.RegisterServices(app.configurator)
 	if err != nil {
@@ -781,7 +784,7 @@ func NewChainApp(
 
 		// Initialize pinned codes in wasmvm as they are not persisted there
 		if err := app.WasmKeeper.InitializePinnedCodes(ctx); err != nil {
-			panic(fmt.Sprintf("failed initialize pinned codes %s", err))
+			app.BaseApp.Logger().Error("failed initialize pinned codes", "err", err)
 		}
 	}
 
