@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type WasmQueryWrapper struct {
@@ -34,7 +36,10 @@ func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Ad
 		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
 		return
 	}
-	target := "grpc.thor.pfc.zone:443"
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
 	useTLS := false
 	normalized := strings.TrimSpace(target)
 	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
@@ -57,7 +62,12 @@ func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Ad
 	}
 	defer conn.Close()
 	wq := wasmtypes.NewQueryClient(conn)
-	resp, err := wq.ContractInfo(ctx.Context(), &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(ctx.Context(), md)
+	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
 	if err != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
 	}
@@ -71,7 +81,10 @@ func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmty
 	if err == nil && resp != nil {
 		return resp, nil
 	}
-	target := "grpc.thor.pfc.zone:443"
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
 	useTLS := false
 	normalized := strings.TrimSpace(target)
 	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
@@ -94,7 +107,12 @@ func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmty
 	}
 	defer conn.Close()
 	wq := wasmtypes.NewQueryClient(conn)
-	return wq.SmartContractState(goCtx, req)
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(goCtx, md)
+	return wq.SmartContractState(qctx, req)
 }
 
 func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtypes.QueryRawContractStateRequest) (*wasmtypes.QueryRawContractStateResponse, error) {
@@ -104,7 +122,10 @@ func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtype
 	if err == nil && resp != nil {
 		return resp, nil
 	}
-	target := "grpc.thor.pfc.zone:443"
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
 	useTLS := false
 	normalized := strings.TrimSpace(target)
 	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
@@ -127,7 +148,12 @@ func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtype
 	}
 	defer conn.Close()
 	wq := wasmtypes.NewQueryClient(conn)
-	return wq.RawContractState(goCtx, req)
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(goCtx, md)
+	return wq.RawContractState(qctx, req)
 }
 
 func (w *WasmQueryWrapper) Code(ctx context.Context, req *wasmtypes.QueryCodeRequest) (*wasmtypes.QueryCodeResponse, error) {
@@ -145,7 +171,10 @@ func (w *WasmQueryWrapper) ContractInfo(goCtx context.Context, req *wasmtypes.Qu
 	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
 		return &wasmtypes.QueryContractInfoResponse{Address: req.Address, ContractInfo: *ci}, nil
 	}
-	target := "grpc.thor.pfc.zone:443"
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
 	useTLS := false
 	normalized := strings.TrimSpace(target)
 	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
@@ -168,7 +197,12 @@ func (w *WasmQueryWrapper) ContractInfo(goCtx context.Context, req *wasmtypes.Qu
 	}
 	defer conn.Close()
 	wq := wasmtypes.NewQueryClient(conn)
-	resp, err := wq.ContractInfo(goCtx, &wasmtypes.QueryContractInfoRequest{Address: req.Address})
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(goCtx, md)
+	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: req.Address})
 	if err != nil || resp == nil {
 		return w.original.ContractInfo(goCtx, req)
 	}
