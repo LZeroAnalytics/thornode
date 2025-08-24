@@ -71,6 +71,23 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 			}
 			qctx := metadata.NewOutgoingContext(context.Background(), md)
 			resp, qerr := wq.Code(qctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
+			needRetry := false
+			if qerr != nil {
+				msg := strings.ToLower(qerr.Error())
+				if strings.Contains(msg, "invalid height") || strings.Contains(msg, "version mismatch") || strings.Contains(msg, "pruned") {
+					needRetry = true
+				}
+			}
+			if resp == nil || len(resp.Data) == 0 {
+				needRetry = true
+			}
+			if needRetry {
+				resp2, qerr2 := wq.Code(context.Background(), &wasmtypes.QueryCodeRequest{CodeId: codeID})
+				if qerr2 == nil && resp2 != nil {
+					resp = resp2
+					qerr = nil
+				}
+			}
 			if qerr == nil && resp != nil {
 				if len(resp.Data) > 0 && len(bz) == 0 {
 					bz = resp.Data
