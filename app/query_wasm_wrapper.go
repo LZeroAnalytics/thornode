@@ -2,10 +2,15 @@ package app
 
 import (
 	"context"
+	"net"
+	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type WasmQueryWrapper struct {
@@ -23,19 +28,51 @@ func NewWasmQueryWrapper(app *THORChainApp, k *wasmkeeper.Keeper, original wasmt
 	}
 }
 
+func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr string) {
+	addr := sdk.MustAccAddressFromBech32(bech32Addr)
+	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
+		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
+		return
+	}
+	target := "grpc.thor.pfc.zone:443"
+	useTLS := false
+	normalized := strings.TrimSpace(target)
+	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
+		useTLS = true
+		normalized = strings.TrimPrefix(strings.TrimPrefix(normalized, "grpcs://"), "https://")
+	} else {
+		if _, p, e := net.SplitHostPort(normalized); e == nil && p == "443" {
+			useTLS = true
+		}
+	}
+	var dialOpt grpc.DialOption
+	if useTLS {
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+	} else {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	conn, err := grpc.Dial(normalized, dialOpt)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	wq := wasmtypes.NewQueryClient(conn)
+	resp, err := wq.ContractInfo(ctx.Context(), &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	if err != nil || resp == nil || resp.ContractInfo == nil {
+		return
+	}
+	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
+}
+
 func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmtypes.QuerySmartContractStateRequest) (*wasmtypes.QuerySmartContractStateResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	if ci := w.keeper.GetContractInfo(ctx, sdk.MustAccAddressFromBech32(req.Address)); ci != nil {
-		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
-	}
+	w.ensureMaterializedByAddress(ctx, req.Address)
 	return w.original.SmartContractState(goCtx, req)
 }
 
 func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtypes.QueryRawContractStateRequest) (*wasmtypes.QueryRawContractStateResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	if ci := w.keeper.GetContractInfo(ctx, sdk.MustAccAddressFromBech32(req.Address)); ci != nil {
-		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
-	}
+	w.ensureMaterializedByAddress(ctx, req.Address)
 	return w.original.RawContractState(goCtx, req)
 }
 
