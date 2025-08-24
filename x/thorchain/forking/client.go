@@ -7,7 +7,7 @@ import (
 	"net"
 	"strings"
 	"encoding/binary"
-
+	"encoding/hex"
 
 	storepb "cosmossdk.io/api/cosmos/store/v1beta1"
 	sdkmath "cosmossdk.io/math"
@@ -141,18 +141,28 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		switch key[0] {
 		case 0x02: // ContractInfo: 0x02 | addr (no length prefix)
 			b := key[1:]
-			if addr, ok := c.parseWasmContractAddrStrict(b); ok {
-				resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
-				if err != nil {
-					low := strings.ToLower(err.Error())
-					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
-						return nil, nil
-					}
-					return nil, fmt.Errorf("wasm ContractInfo: %w", err)
-				}
-				return c.codec.Marshal(&resp.ContractInfo)
+			addr, ok := c.parseWasmContractAddrStrict(b)
+			if !ok {
+				fmt.Printf("[forking][wasm][0x02] failed to parse addr from key=%s\n", hex.EncodeToString(key))
+				return nil, nil
 			}
-			return nil, nil
+			fmt.Printf("[forking][wasm][0x02] parsed addr=%s from key=%s\n", addr, hex.EncodeToString(key))
+			resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
+			if err != nil {
+				low := strings.ToLower(err.Error())
+				if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
+					fmt.Printf("[forking][wasm][0x02] remote miss for addr=%s err=%v\n", addr, err)
+					return nil, nil
+				}
+				fmt.Printf("[forking][wasm][0x02] remote error for addr=%s err=%v\n", addr, err)
+				return nil, fmt.Errorf("wasm ContractInfo: %w", err)
+			}
+			if resp == nil {
+				fmt.Printf("[forking][wasm][0x02] empty response for addr=%s\n", addr)
+				return nil, nil
+			}
+			fmt.Printf("[forking][wasm][0x02] remote success for addr=%s code_id=%d\n", addr, resp.ContractInfo.CodeID)
+			return c.codec.Marshal(&resp.ContractInfo)
 		case 0x01: // CodeInfo: 0x01 | codeID(8 bytes, big-endian)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
