@@ -78,10 +78,13 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
 	}
 	qctx := metadata.NewOutgoingContext(ctx.Context(), md)
-	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
-	if err != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
+	resp, rerr := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		resp, rerr = wq.ContractInfo(ctx.Context(), &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	}
+	if rerr != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
-}
+	}
 	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
 }
 

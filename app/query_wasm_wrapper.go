@@ -30,6 +30,23 @@ func NewWasmQueryWrapper(app *THORChainApp, k *wasmkeeper.Keeper, original wasmt
 	}
 }
 
+func shouldRetryWithoutHeight(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "invalid height") {
+		return true
+	}
+	if strings.Contains(msg, "version mismatch") {
+		return true
+	}
+	if strings.Contains(msg, "pruned") {
+		return true
+	}
+	return false
+}
+
 func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr string) {
 	addr := sdk.MustAccAddressFromBech32(bech32Addr)
 	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
@@ -67,8 +84,11 @@ func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Ad
 		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
 	}
 	qctx := metadata.NewOutgoingContext(ctx.Context(), md)
-	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
-	if err != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
+	resp, rerr := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		resp, rerr = wq.ContractInfo(ctx.Context(), &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	}
+	if rerr != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
 	}
 	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
@@ -112,7 +132,14 @@ func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmty
 		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
 	}
 	qctx := metadata.NewOutgoingContext(goCtx, md)
-	return wq.SmartContractState(qctx, req)
+	rem, rerr := wq.SmartContractState(qctx, req)
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		rem, rerr = wq.SmartContractState(goCtx, req)
+	}
+	if rerr == nil && rem != nil {
+		return rem, nil
+	}
+	return resp, err
 }
 
 func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtypes.QueryRawContractStateRequest) (*wasmtypes.QueryRawContractStateResponse, error) {
@@ -153,7 +180,14 @@ func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtype
 		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
 	}
 	qctx := metadata.NewOutgoingContext(goCtx, md)
-	return wq.RawContractState(qctx, req)
+	rem, rerr := wq.RawContractState(qctx, req)
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		rem, rerr = wq.RawContractState(goCtx, req)
+	}
+	if rerr == nil && rem != nil {
+		return rem, nil
+	}
+	return resp, err
 }
 
 func (w *WasmQueryWrapper) Code(goCtx context.Context, req *wasmtypes.QueryCodeRequest) (*wasmtypes.QueryCodeResponse, error) {
@@ -195,6 +229,9 @@ func (w *WasmQueryWrapper) Code(goCtx context.Context, req *wasmtypes.QueryCodeR
 	}
 	qctx := metadata.NewOutgoingContext(goCtx, md)
 	rem, rerr := wq.Code(qctx, req)
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		rem, rerr = wq.Code(goCtx, req)
+	}
 	if rerr == nil && rem != nil && len(rem.Data) > 0 {
 		_ = w.app.materializeAndPinWasm(ctx, req.CodeId)
 		return rem, nil
@@ -240,6 +277,9 @@ func (w *WasmQueryWrapper) CodeInfo(goCtx context.Context, req *wasmtypes.QueryC
 	}
 	qctx := metadata.NewOutgoingContext(goCtx, md)
 	rem, rerr := wq.Code(qctx, req)
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		rem, rerr = wq.Code(goCtx, req)
+	}
 	if rerr == nil && rem != nil {
 		_ = w.app.materializeAndPinWasm(ctx, req.CodeId)
 		return rem, nil
@@ -290,12 +330,15 @@ func (w *WasmQueryWrapper) ContractInfo(goCtx context.Context, req *wasmtypes.Qu
 		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
 	}
 	qctx := metadata.NewOutgoingContext(goCtx, md)
-	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: req.Address})
-	if err != nil || resp == nil {
+	rem, rerr := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: req.Address})
+	if rerr != nil && shouldRetryWithoutHeight(rerr) {
+		rem, rerr = wq.ContractInfo(goCtx, &wasmtypes.QueryContractInfoRequest{Address: req.Address})
+	}
+	if rerr != nil || rem == nil {
 		return w.original.ContractInfo(goCtx, req)
 	}
-	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
-	return resp, nil
+	_ = w.app.materializeAndPinWasm(ctx, rem.ContractInfo.CodeID)
+	return rem, nil
 }
 func (w *WasmQueryWrapper) ContractHistory(ctx context.Context, req *wasmtypes.QueryContractHistoryRequest) (*wasmtypes.QueryContractHistoryResponse, error) {
 	return w.original.ContractHistory(ctx, req)
