@@ -392,6 +392,9 @@ func NewChainApp(
 		}
 		logger.Info("Forking config", "height", forkingConfig.ForkHeight, "cache_enabled", forkingConfig.CacheEnabled, "cache_size", forkingConfig.CacheSize)
 
+		app.forkGRPC = forkingGRPC
+		app.forkHeight = forkingConfig.ForkHeight
+
 		if forkingConfig.TrustingPeriod == 0 {
 			forkingConfig.TrustingPeriod = 24 * time.Hour
 		}

@@ -13,18 +13,19 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/cosmos/cosmos-sdk/codec"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/codes"
-)
 
 type remoteClient struct {
 	grpcConn    *grpc.ClientConn
 	queryClient types.QueryClient
+	wasmClient  wasmtypes.QueryClient
 	config      RemoteConfig
 	codec       codec.Codec
 }
@@ -78,10 +79,12 @@ func NewRemoteClient(config RemoteConfig, cdc codec.Codec) (RemoteClient, error)
 	}
 
 	client := types.NewQueryClient(conn)
+	wq := wasmtypes.NewQueryClient(conn)
 
 	cli := &remoteClient{
 		grpcConn:    conn,
 		queryClient: client,
+		wasmClient:  wq,
 		config:      config,
 		codec:       cdc,
 	}
