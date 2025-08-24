@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type WasmMsgWrapper struct {
@@ -45,7 +47,10 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
 		return
 	}
-	target := "grpc.thor.pfc.zone:443"
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
 	useTLS := false
 	normalized := strings.TrimSpace(target)
 	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
@@ -68,7 +73,12 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 	}
 	defer conn.Close()
 	wq := wasmtypes.NewQueryClient(conn)
-	resp, err := wq.ContractInfo(ctx.Context(), &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(ctx.Context(), md)
+	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
 	if err != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
 	}

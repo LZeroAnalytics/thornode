@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) error {
@@ -24,9 +26,12 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 
 	bz, err := app.WasmKeeper.GetByteCode(ctx, codeID)
 	if err != nil || len(bz) == 0 {
-		target := "grpc.thor.pfc.zone:443"
+		target := strings.TrimSpace(app.forkGRPC)
+		if target == "" {
+			target = "grpc.thor.pfc.zone:443"
+		}
 		useTLS := false
-		normalized := strings.TrimSpace(target)
+		normalized := target
 		if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
 			useTLS = true
 			normalized = strings.TrimPrefix(strings.TrimPrefix(normalized, "grpcs://"), "https://")
@@ -44,7 +49,12 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		conn, derr := grpc.Dial(normalized, dialOpt)
 		if derr == nil {
 			wq := wasmtypes.NewQueryClient(conn)
-			resp, qerr := wq.Code(ctx.Context(), &wasmtypes.QueryCodeRequest{CodeId: codeID})
+			md := metadata.New(nil)
+			if app.forkHeight > 0 {
+				md.Set("x-cosmos-block-height", fmt.Sprintf("%d", app.forkHeight))
+			}
+			qctx := metadata.NewOutgoingContext(context.Background(), md)
+			resp, qerr := wq.Code(qctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
 			if qerr == nil && resp != nil && len(resp.Data) > 0 {
 				bz = resp.Data
 			}
