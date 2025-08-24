@@ -20,6 +20,8 @@ import (
 )
 
 func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) error {
+	fmt.Printf("[materialize] start codeID=%d forkHeight=%d wasmDir=%s\n", codeID, app.forkHeight, app.wasmDir)
+
 	if codeID == 0 {
 		return nil
 	}
@@ -63,6 +65,7 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	}
 
 	if len(bz) == 0 {
+		fmt.Printf("[materialize] no bytecode available for codeID=%d\n", codeID)
 		return nil
 	}
 
@@ -79,11 +82,13 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	}
 
 	if _, err := os.Stat(targetA); err != nil {
+		fmt.Printf("[materialize] writing wasm file: %s\n", targetA)
 		if writeErr := os.WriteFile(targetA, bz, 0o644); writeErr != nil {
 			return writeErr
 		}
 	}
 	if _, err := os.Stat(targetB); err != nil {
+		fmt.Printf("[materialize] writing wasm file: %s\n", targetB)
 		if writeErr := os.WriteFile(targetB, bz, 0o644); writeErr != nil {
 			return writeErr
 		}
@@ -91,6 +96,7 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 
 	pk := wasmkeeper.NewGovPermissionKeeper(app.WasmKeeper)
 	_ = pk.UnpinCode(ctx, codeID)
+	fmt.Printf("[materialize] pin codeID=%d\n", codeID)
 	if err := pk.PinCode(ctx, codeID); err != nil {
 		return err
 	}
