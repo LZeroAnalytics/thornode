@@ -91,6 +91,9 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 				} else {
 					fmt.Printf("[forking][GET] negative-cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 					f.service.updateStats(false, true, 0, false)
+	if f.storeKey == "wasm" && len(key) > 0 && key[0] == 0x02 {
+		fmt.Printf("[forking][GET][wasm] ContractInfo key len=%d key=%s\n", len(key), hex.EncodeToString(key))
+	}
 					return nil, nil
 				}
 			} else {
