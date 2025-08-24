@@ -26,8 +26,13 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		return nil
 	}
 
+	var codeHash []byte
+	if ci := app.WasmKeeper.GetCodeInfo(ctx, codeID); ci != nil && len(ci.CodeHash) > 0 {
+		codeHash = ci.CodeHash
+	}
+
 	bz, err := app.WasmKeeper.GetByteCode(ctx, codeID)
-	if err != nil || len(bz) == 0 {
+	if err != nil || len(bz) == 0 || len(codeHash) == 0 {
 		target := strings.TrimSpace(app.forkGRPC)
 		if target == "" {
 			target = "grpc.thor.pfc.zone:443"
@@ -57,8 +62,13 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 			}
 			qctx := metadata.NewOutgoingContext(context.Background(), md)
 			resp, qerr := wq.Code(qctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
-			if qerr == nil && resp != nil && len(resp.Data) > 0 {
-				bz = resp.Data
+			if qerr == nil && resp != nil {
+				if len(resp.Data) > 0 && len(bz) == 0 {
+					bz = resp.Data
+				}
+				if len(resp.DataHash) > 0 && len(codeHash) == 0 {
+					codeHash = resp.DataHash
+				}
 			}
 			_ = conn.Close()
 		}
@@ -70,27 +80,33 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	}
 
 	sum := sha256.Sum256(bz)
-	filename := hex.EncodeToString(sum[:]) + ".wasm"
-	targetA := filepath.Join(app.wasmDir, "wasm", "wasm", filename)
-	targetB := filepath.Join(app.wasmDir, "wasm", filename)
-
-	if err := os.MkdirAll(filepath.Dir(targetA), 0o755); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(targetB), 0o755); err != nil {
-		return err
+	shaFilename := hex.EncodeToString(sum[:]) + ".wasm"
+	var hashFilename string
+	if len(codeHash) > 0 {
+		hashFilename = hex.EncodeToString(codeHash) + ".wasm"
 	}
 
-	if _, err := os.Stat(targetA); err != nil {
-		fmt.Printf("[materialize] writing wasm file: %s\n", targetA)
-		if writeErr := os.WriteFile(targetA, bz, 0o644); writeErr != nil {
-			return writeErr
+	targets := []string{}
+	if hashFilename != "" {
+		targets = append(targets,
+			filepath.Join(app.wasmDir, "wasm", "wasm", hashFilename),
+			filepath.Join(app.wasmDir, "wasm", hashFilename),
+		)
+	}
+	targets = append(targets,
+		filepath.Join(app.wasmDir, "wasm", "wasm", shaFilename),
+		filepath.Join(app.wasmDir, "wasm", shaFilename),
+	)
+
+	for _, p := range targets {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return err
 		}
-	}
-	if _, err := os.Stat(targetB); err != nil {
-		fmt.Printf("[materialize] writing wasm file: %s\n", targetB)
-		if writeErr := os.WriteFile(targetB, bz, 0o644); writeErr != nil {
-			return writeErr
+		if _, err := os.Stat(p); err != nil {
+			fmt.Printf("[materialize] writing wasm file: %s\n", p)
+			if writeErr := os.WriteFile(p, bz, 0o644); writeErr != nil {
+				return writeErr
+			}
 		}
 	}
 
