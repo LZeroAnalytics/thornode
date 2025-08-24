@@ -153,19 +153,19 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				return c.codec.Marshal(&resp.ContractInfo)
 			}
 			return nil, nil
-		case 0x01: // Code: 0x01 | codeID(8 bytes, big-endian)
+		case 0x01: // CodeInfo: 0x01 | codeID(8 bytes, big-endian)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
 				if err != nil {
 					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such code") {
 						return nil, nil
 					}
-					return nil, fmt.Errorf("wasm Code bytes: %w", err)
+					return nil, fmt.Errorf("wasm CodeInfo: %w", err)
 				}
-				if resp == nil || len(resp.Data) == 0 {
+				if resp == nil {
 					return nil, nil
 				}
-				return resp.Data, nil
+				return c.codec.Marshal(&resp.CodeInfo)
 			}
 			return nil, nil
 		case 0x03: // ContractStore: 0x03 | addr (20 or 32) | key...
@@ -732,8 +732,8 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 		}
 	}
 	if strings.EqualFold(storeKey, wasmtypes.StoreKey) {
-		if len(start) >= 2 && start[0] == 0x05 {
-			if addr, _, ok := c.parseWasmContractStoreKey(start[1:]); ok {
+		if len(start) >= 2 && start[0] == 0x03 {
+			if addr, _, ok := c.parseWasmContractStoreKeyNoLen(start[1:]); ok {
 				var out []KeyValue
 				var pageKey []byte
 				for {
@@ -752,7 +752,7 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 					}
 					prefix := c.makeWasmContractStorePrefix(addr)
 					for _, m := range resp.Models {
-						k := append(append([]byte{0x05}, prefix...), m.Key...)
+						k := append(append([]byte{0x03}, prefix...), m.Key...)
 						v := append([]byte(nil), m.Value...)
 						out = append(out, KeyValue{Key: k, Value: v})
 					}
@@ -1081,10 +1081,7 @@ func (c *remoteClient) makeWasmContractStorePrefix(addr string) []byte {
 	if err != nil {
 		return nil
 	}
-	bz := []byte(acc)
-	lenPrefix := protowire.AppendVarint(nil, uint64(len(bz)))
-	prefix := append(lenPrefix, bz...)
-	return prefix
+	return []byte(acc)
 }
 func (c *remoteClient) parseWasmContractStoreKeyNoLen(b []byte) (string, []byte, bool) {
 	if len(b) > 32 {
