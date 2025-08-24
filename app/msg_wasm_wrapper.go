@@ -69,7 +69,7 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 	defer conn.Close()
 	wq := wasmtypes.NewQueryClient(conn)
 	resp, err := wq.ContractInfo(ctx.Context(), &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
-	if err != nil || resp == nil || resp.ContractInfo == nil {
+	if err != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
 	}
 	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)

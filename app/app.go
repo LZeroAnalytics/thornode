@@ -179,6 +179,9 @@ type THORChainApp struct {
 	configurator        module.Configurator
 	queryServiceRouter  *QueryServiceRouter
 	once                sync.Once
+	forkGRPC   string
+	forkHeight int64
+
 }
 
 
