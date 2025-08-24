@@ -165,7 +165,12 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				if resp == nil {
 					return nil, nil
 				}
-				return c.codec.Marshal(&resp.CodeInfo)
+				ci := wasmtypes.CodeInfo{
+					CodeHash:               resp.DataHash,
+					Creator:                resp.Creator,
+					InstantiatePermission:  resp.InstantiatePermission,
+				}
+				return c.codec.Marshal(&ci)
 			}
 			return nil, nil
 		case 0x03: // ContractStore: 0x03 | addr (20 or 32) | key...
