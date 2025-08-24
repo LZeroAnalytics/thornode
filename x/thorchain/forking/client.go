@@ -985,9 +985,6 @@ func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
 			return nil, fmt.Errorf("unexpected outer field: num=%d wt=%d", fieldNum, wireType)
 		}
 
-			return nil, fmt.Errorf("unexpected outer field: num=%d wt=%d", fieldNum, wireType)
-		}
-
 		msgBytes, m := protowire.ConsumeBytes(b[n:])
 		if m < 0 {
 			return nil, fmt.Errorf("consume outer bytes failed")
