@@ -959,11 +959,14 @@ func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
 	if len(b) == 0 {
 		return "", false
 	}
-	l := int(b[0])
-	if len(b) < 1+l {
+	length, n := protowire.ConsumeVarint(b)
+	if n <= 0 {
 		return "", false
 	}
-	addrBz := b[1 : 1+l]
+	if uint64(len(b[n:])) < length {
+		return "", false
+	}
+	addrBz := b[n : n+int(length)]
 	return cosmos.AccAddress(addrBz).String(), true
 }
 
@@ -978,12 +981,15 @@ func (c *remoteClient) parseWasmContractStoreKey(b []byte) (string, []byte, bool
 	if len(b) == 0 {
 		return "", nil, false
 	}
-	l := int(b[0])
-	if len(b) < 1+l {
+	length, n := protowire.ConsumeVarint(b)
+	if n <= 0 {
 		return "", nil, false
 	}
-	addrBz := b[1 : 1+l]
-	suffix := b[1+l:]
+	if uint64(len(b[n:])) < length {
+		return "", nil, false
+	}
+	addrBz := b[n : n+int(length)]
+	suffix := b[n+int(length):]
 	return cosmos.AccAddress(addrBz).String(), suffix, true
 }
 
@@ -993,9 +999,8 @@ func (c *remoteClient) makeWasmContractStorePrefix(addr string) []byte {
 		return nil
 	}
 	bz := []byte(acc)
-	prefix := make([]byte, 1+len(bz))
-	prefix[0] = byte(len(bz))
-	copy(prefix[1:], bz)
+	varintBuf := protowire.AppendVarint(nil, uint64(len(bz)))
+	prefix := append(varintBuf, bz...)
 	return prefix
 }
 
