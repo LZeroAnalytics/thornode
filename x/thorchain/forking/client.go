@@ -141,20 +141,15 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		switch key[0] {
 		case 0x02:
 			b := key[1:]
-			candidates := c.parseWasmContractAddrCandidates(b)
-			fmt.Printf("[forking][WASM][ContractInfo] key=%x candidates=%v\n", key, candidates)
-			for _, addr := range candidates {
-				fmt.Printf("[forking][WASM][ContractInfo] try addr=%s height=%d\n", addr, height)
+			if addr, ok := c.parseWasmContractAddrStrict(b); ok {
 				resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
 				if err != nil {
 					low := strings.ToLower(err.Error())
-					fmt.Printf("[forking][WASM][ContractInfo] miss addr=%s err=%s\n", addr, low)
 					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
-						continue
+						return nil, nil
 					}
 					return nil, fmt.Errorf("wasm ContractInfo: %w", err)
 				}
-				fmt.Printf("[forking][WASM][ContractInfo] hit addr=%s code_id=%d\n", addr, resp.ContractInfo.CodeID)
 				return c.codec.Marshal(&resp.ContractInfo)
 			}
 			return nil, nil
@@ -1028,6 +1023,23 @@ func (c *remoteClient) parseWasmContractAddrCandidates(b []byte) []string {
 	}
 	return dedup
 }
+func (c *remoteClient) parseWasmContractAddrStrict(b []byte) (string, bool) {
+	if len(b) == 0 {
+		return "", false
+	}
+	if ln, n := protowire.ConsumeVarint(b); n > 0 && int(ln) == 20 && len(b) >= n+int(ln) {
+		addrBz := b[n : n+int(ln)]
+		return cosmos.AccAddress(addrBz).String(), true
+	}
+	if len(b) == 20 {
+		return cosmos.AccAddress(b).String(), true
+	}
+	if len(b) == 21 && b[0] == 0x14 {
+		return cosmos.AccAddress(b[1:21]).String(), true
+	}
+	return "", false
+}
+
 func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
 	if len(b) >= 1 {
 		ln, n := protowire.ConsumeVarint(b)
