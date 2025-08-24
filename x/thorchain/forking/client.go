@@ -1023,8 +1023,17 @@ func (c *remoteClient) parseWasmContractAddrCandidates(b []byte) []string {
 	return dedup
 }
 func (c *remoteClient) parseWasmContractAddrStrict(b []byte) (string, bool) {
-	if len(b) == 20 || len(b) == 32 {
+	if len(b) == 0 {
+		return "", false
+	}
+	if ln, n := protowire.ConsumeVarint(b); n > 0 && int(ln) == 20 && len(b) >= n+int(ln) {
+		return cosmos.AccAddress(b[n : n+int(ln)]).String(), true
+	}
+	if len(b) == 20 {
 		return cosmos.AccAddress(b).String(), true
+	}
+	if len(b) == 21 && b[0] == 0x14 {
+		return cosmos.AccAddress(b[1:21]).String(), true
 	}
 	return "", false
 }
@@ -1089,6 +1098,14 @@ func (c *remoteClient) makeWasmContractStorePrefix(addr string) []byte {
 	return []byte(acc)
 }
 func (c *remoteClient) parseWasmContractStoreKeyNoLen(b []byte) (string, []byte, bool) {
+	if ln, n := protowire.ConsumeVarint(b); n > 0 && int(ln) == 20 && len(b) >= n+int(ln) {
+		addrBz := b[n : n+int(ln)]
+		return cosmos.AccAddress(addrBz).String(), b[n+int(ln):], true
+	}
+	if len(b) >= 21 && b[0] == 0x14 {
+		addrBz := b[1:21]
+		return cosmos.AccAddress(addrBz).String(), b[21:], true
+	}
 	if len(b) > 32 {
 		addrBz := b[:32]
 		if addr, ok := c.parseWasmContractAddrStrict(addrBz); ok {
