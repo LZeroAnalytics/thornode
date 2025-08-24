@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -497,7 +498,7 @@ func NewChainApp(
 		app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper,
 	)
 
-	wasmDir := homePath
+	wasmDir := filepath.Join(homePath, "data")
 	app.wasmDir = wasmDir
 	wasmConfig, err := wasm.ReadWasmConfig(appOpts)
 	if err != nil {
