@@ -112,9 +112,18 @@ func isNotFoundErr(err error) bool {
 	return false
 }
 
-func withHeight(ctx context.Context, height int64) context.Context {
-	md := metadata.Pairs("x-cosmos-block-height", fmt.Sprintf("%d", height))
-	return metadata.NewOutgoingContext(ctx, md)
+func (c *remoteClient) ctxWithHeight(ctx context.Context, height int64) context.Context {
+	safe := height
+	if height > 0 {
+		if latest, err := c.GetLatestHeight(ctx); err == nil && latest > 0 && height > latest {
+			safe = latest
+		}
+	}
+	if safe > 0 {
+		md := metadata.Pairs("x-cosmos-block-height", fmt.Sprintf("%d", safe))
+		return metadata.NewOutgoingContext(ctx, md)
+	}
+	return ctx
 }
 
 func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []byte, height int64) ([]byte, error) {
@@ -132,7 +141,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		switch key[0] {
 		case 0x02: // ContractInfo: 0x02 | addrLen | addrBytes
 			if addr, ok := c.parseWasmContractAddr(key[1:]); ok {
-				resp, err := c.wasmClient.ContractInfo(withHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
+				resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
 				if err != nil {
 					if isNotFoundErr(err) {
 						return nil, nil
@@ -146,7 +155,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			return nil, nil
 		case 0x03: // CodeBytes: 0x03 | codeID(8be)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
-				resp, err := c.wasmClient.Code(withHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
+				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
 				if err != nil {
 					if isNotFoundErr(err) {
 						return nil, nil
@@ -164,7 +173,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				if len(suffix) == 0 {
 					return nil, nil
 				}
-				resp, err := c.wasmClient.RawContractState(withHeight(ctx, height), &wasmtypes.QueryRawContractStateRequest{
+				resp, err := c.wasmClient.RawContractState(c.ctxWithHeight(ctx, height), &wasmtypes.QueryRawContractStateRequest{
 					Address:   addr,
 					QueryData: suffix,
 				})
@@ -727,7 +736,7 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 				var out []KeyValue
 				var pageKey []byte
 				for {
-					resp, err := c.wasmClient.AllContractState(withHeight(ctx, height), &wasmtypes.QueryAllContractStateRequest{
+					resp, err := c.wasmClient.AllContractState(c.ctxWithHeight(ctx, height), &wasmtypes.QueryAllContractStateRequest{
 						Address: addr,
 						Pagination: &query.PageRequest{
 							Key:   pageKey,
