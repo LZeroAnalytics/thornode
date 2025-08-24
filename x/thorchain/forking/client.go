@@ -166,9 +166,9 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 					return nil, nil
 				}
 				ci := wasmtypes.CodeInfo{
-					CodeHash:               resp.DataHash,
-					Creator:                resp.Creator,
-					InstantiatePermission:  resp.InstantiatePermission,
+					CodeHash:              resp.DataHash,
+					Creator:               resp.Creator,
+					InstantiateConfig:     resp.InstantiatePermission,
 				}
 				return c.codec.Marshal(&ci)
 			}
