@@ -46,7 +46,9 @@ func NewForkingKVStore(
 
 func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	if f.service.IsGenesisMode() {
-		return false
+		if f.storeKey != "wasm" {
+			return false
+		}
 	}
 
 	if f.remoteClient == nil {
