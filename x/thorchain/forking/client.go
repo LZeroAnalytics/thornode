@@ -1061,7 +1061,7 @@ func (c *remoteClient) parseWasmContractAddrStrict(b []byte) (string, bool) {
 		return cosmos.AccAddress(b[1:21]).String(), true
 	}
 	if len(b) == 32 {
-		return cosmos.AccAddress(b[12:32]).String(), true
+		return cosmos.AccAddress(b).String(), true
 	}
 	return "", false
 }
