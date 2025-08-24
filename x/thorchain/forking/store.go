@@ -125,6 +125,9 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
 		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
+		if f.storeKey == "wasm" {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -237,6 +240,9 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 
 	if err != nil {
 		fmt.Printf("[forking][RANGE] remote-error store=%s start=%s end=%s height=%d duration=%v err=%v\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end), height, duration, err)
+		if f.storeKey == "wasm" {
+			return &EmptyIterator{}, nil
+		}
 		return &EmptyIterator{}, err
 	}
 
