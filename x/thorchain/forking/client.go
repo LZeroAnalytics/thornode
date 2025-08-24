@@ -1027,9 +1027,19 @@ func (c *remoteClient) parseWasmContractAddrStrict(b []byte) (string, bool) {
 	if len(b) == 0 {
 		return "", false
 	}
-	if ln, n := protowire.ConsumeVarint(b); n > 0 && int(ln) == 20 && len(b) >= n+int(ln) {
-		addrBz := b[n : n+int(ln)]
-		return cosmos.AccAddress(addrBz).String(), true
+	if ln, n := protowire.ConsumeVarint(b); n > 0 && len(b) >= n+int(ln) {
+		if int(ln) == 20 {
+			addrBz := b[n : n+20]
+			return cosmos.AccAddress(addrBz).String(), true
+		}
+		seg := b[n : n+int(ln)]
+		if len(seg) >= 6 && (seg[0] == 't' && seg[1] == 'h' && seg[2] == 'o' && seg[3] == 'r' && seg[4] == '1') {
+			if bech := string(seg); bech != "" {
+				if addr, err := cosmos.AccAddressFromBech32(bech); err == nil {
+					return addr.String(), true
+				}
+			}
+		}
 	}
 	if len(b) == 20 {
 		return cosmos.AccAddress(b).String(), true
