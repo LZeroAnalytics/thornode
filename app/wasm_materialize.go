@@ -68,14 +68,23 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 
 	sum := sha256.Sum256(bz)
 	filename := hex.EncodeToString(sum[:]) + ".wasm"
-	target := filepath.Join(app.wasmDir, "wasm", "wasm", filename)
+	targetA := filepath.Join(app.wasmDir, "wasm", "wasm", filename)
+	targetB := filepath.Join(app.wasmDir, "wasm", filename)
 
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetA), 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(targetB), 0o755); err != nil {
 		return err
 	}
 
-	if _, err := os.Stat(target); err != nil {
-		if writeErr := os.WriteFile(target, bz, 0o644); writeErr != nil {
+	if _, err := os.Stat(targetA); err != nil {
+		if writeErr := os.WriteFile(targetA, bz, 0o644); writeErr != nil {
+			return writeErr
+		}
+	}
+	if _, err := os.Stat(targetB); err != nil {
+		if writeErr := os.WriteFile(targetB, bz, 0o644); writeErr != nil {
 			return writeErr
 		}
 	}
