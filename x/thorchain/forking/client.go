@@ -975,9 +975,9 @@ func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
 		return cosmos.AccAddress(b).String(), true
 	}
 	if len(b) >= 1 {
-		l := int(b[0])
-		if l > 0 && len(b) == 1+l {
-			addrBz := b[1 : 1+l]
+		ln, n := protowire.ConsumeVarint(b)
+		if n > 0 && int(ln) > 0 && len(b) >= n+int(ln) {
+			addrBz := b[n : n+int(ln)]
 			return cosmos.AccAddress(addrBz).String(), true
 		}
 	}
@@ -993,10 +993,10 @@ func (c *remoteClient) parseWasmCodeID(b []byte) (uint64, bool) {
 
 func (c *remoteClient) parseWasmContractStoreKey(b []byte) (string, []byte, bool) {
 	if len(b) >= 1 {
-		l := int(b[0])
-		if l > 0 && len(b) >= 1+l {
-			addrBz := b[1 : 1+l]
-			suffix := b[1+l:]
+		ln, n := protowire.ConsumeVarint(b)
+		if n > 0 && int(ln) > 0 && len(b) >= n+int(ln) {
+			addrBz := b[n : n+int(ln)]
+			suffix := b[n+int(ln):]
 			return cosmos.AccAddress(addrBz).String(), suffix, true
 		}
 	}
@@ -1014,7 +1014,8 @@ func (c *remoteClient) makeWasmContractStorePrefix(addr string) []byte {
 		return nil
 	}
 	bz := []byte(acc)
-	prefix := append([]byte{byte(len(bz))}, bz...)
+	lenPrefix := protowire.AppendVarint(nil, uint64(len(bz)))
+	prefix := append(lenPrefix, bz...)
 	return prefix
 }
 
