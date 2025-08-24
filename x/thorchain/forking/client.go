@@ -117,8 +117,6 @@ func withHeight(ctx context.Context, height int64) context.Context {
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
-}
-
 func (c *remoteClient) GetWithProof(ctx context.Context, storeKey string, key []byte, height int64) ([]byte, error) {
 	return c.fetchViaGRPC(ctx, storeKey, key, height)
 }
