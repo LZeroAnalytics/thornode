@@ -141,20 +141,9 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		switch key[0] {
 		case 0x02:
 			b := key[1:]
-			var candidates []string
-			if len(b) >= 1 {
-				if ln, n := protowire.ConsumeVarint(b); n > 0 && int(ln) == 20 && len(b) >= n+int(ln) {
-					addrBz := b[n : n+int(ln)]
-					candidates = append(candidates, cosmos.AccAddress(addrBz).String())
-				}
-			}
+			candidates := c.parseWasmContractAddrCandidates(b)
 			fmt.Printf("[forking][WASM][ContractInfo] key=%x candidates=%v\n", key, candidates)
-			seen := make(map[string]struct{})
 			for _, addr := range candidates {
-				if _, ok := seen[addr]; ok || addr == "" {
-					continue
-				}
-				seen[addr] = struct{}{}
 				fmt.Printf("[forking][WASM][ContractInfo] try addr=%s height=%d\n", addr, height)
 				resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
 				if err != nil {
@@ -993,6 +982,42 @@ func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
 
 	return pairs, nil
 }
+func (c *remoteClient) parseWasmContractAddrCandidates(b []byte) []string {
+	var out []string
+	if len(b) == 0 {
+		return out
+	}
+	if ln, n := protowire.ConsumeVarint(b); n > 0 && int(ln) == 20 && len(b) >= n+int(ln) {
+		addrBz := b[n : n+int(ln)]
+		out = append(out, cosmos.AccAddress(addrBz).String())
+	}
+	if len(b) == 20 {
+		out = append(out, cosmos.AccAddress(b).String())
+	}
+	if len(b) > 20 {
+		h := b[:20]
+		out = append(out, cosmos.AccAddress(h).String())
+		t := b[len(b)-20:]
+		out = append(out, cosmos.AccAddress(t).String())
+		if len(b) >= 21 {
+			midStart := (len(b) - 20) / 2
+			out = append(out, cosmos.AccAddress(b[midStart:midStart+20]).String())
+		}
+	}
+	seen := make(map[string]struct{}, len(out))
+	dedup := make([]string, 0, len(out))
+	for _, a := range out {
+		if a == "" {
+			continue
+		}
+		if _, ok := seen[a]; ok {
+			continue
+		}
+		seen[a] = struct{}{}
+		dedup = append(dedup, a)
+	}
+	return dedup
+}
 func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
 	if len(b) >= 1 {
 		ln, n := protowire.ConsumeVarint(b)
@@ -1000,6 +1025,12 @@ func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
 			addrBz := b[n : n+int(ln)]
 			return cosmos.AccAddress(addrBz).String(), true
 		}
+	}
+	if len(b) == 20 {
+		return cosmos.AccAddress(b).String(), true
+	}
+	if len(b) > 20 {
+		return cosmos.AccAddress(b[len(b)-20:]).String(), true
 	}
 	return "", false
 }
@@ -1019,6 +1050,16 @@ func (c *remoteClient) parseWasmContractStoreKey(b []byte) (string, []byte, bool
 			suffix := b[n+int(ln):]
 			return cosmos.AccAddress(addrBz).String(), suffix, true
 		}
+	}
+	if len(b) >= 20 {
+		addrBz := b[:20]
+		suffix := b[20:]
+		return cosmos.AccAddress(addrBz).String(), suffix, true
+	}
+	if len(b) > 20 {
+		addrBz := b[len(b)-20:]
+		suffix := b[:len(b)-20]
+		return cosmos.AccAddress(addrBz).String(), suffix, true
 	}
 	return "", nil, false
 }
