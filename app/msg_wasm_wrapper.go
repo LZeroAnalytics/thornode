@@ -81,13 +81,15 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 	resp, err := wq.ContractInfo(qctx, &wasmtypes.QueryContractInfoRequest{Address: bech32Addr})
 	if err != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
-	}
+}
 	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
 }
 
 func (w *WasmMsgWrapper) ExecuteContract(goCtx context.Context, req *wasmtypes.MsgExecuteContract) (*wasmtypes.MsgExecuteContractResponse, error) {
+	fmt.Printf("[wasm-exec] ExecuteContract addr=%s\n", req.Contract)
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	w.ensureMaterializedByAddress(ctx, req.Contract)
+	fmt.Printf("[wasm-exec] ExecuteContract dispatched addr=%s\n", req.Contract)
 	return w.original.ExecuteContract(goCtx, req)
 }
 
