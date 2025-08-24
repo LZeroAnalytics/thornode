@@ -60,6 +60,3 @@ func (w *WasmQueryWrapper) ContractsByCode(ctx context.Context, req *wasmtypes.Q
 func (w *WasmQueryWrapper) AllContractState(ctx context.Context, req *wasmtypes.QueryAllContractStateRequest) (*wasmtypes.QueryAllContractStateResponse, error) {
 	return w.original.AllContractState(ctx, req)
 }
-func (w *WasmQueryWrapper) RawContractStateV2(ctx context.Context, req *wasmtypes.QueryRawContractStateV2Request) (*wasmtypes.QueryRawContractStateV2Response, error) {
-	return w.original.RawContractStateV2(ctx, req)
-}
