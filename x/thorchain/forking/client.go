@@ -111,6 +111,23 @@ func isNotFoundErr(err error) bool {
 	}
 	return false
 }
+func shouldRetryWithoutHeight(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "invalid height") {
+		return true
+	}
+	if strings.Contains(msg, "version mismatch") {
+		return true
+	}
+	if strings.Contains(msg, "pruned") {
+		return true
+	}
+	return false
+}
+
 
 func (c *remoteClient) ctxWithHeight(ctx context.Context, height int64) context.Context {
 	safe := height
@@ -149,6 +166,11 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			fmt.Printf("[forking][wasm][0x02] parsed addr=%s from key=%s\n", addr, hex.EncodeToString(key))
 			resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
 			if err != nil {
+				if shouldRetryWithoutHeight(err) {
+					resp, err = c.wasmClient.ContractInfo(ctx, &wasmtypes.QueryContractInfoRequest{Address: addr})
+				}
+			}
+			if err != nil {
 				low := strings.ToLower(err.Error())
 				if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
 					fmt.Printf("[forking][wasm][0x02] remote miss for addr=%s err=%v\n", addr, err)
@@ -166,6 +188,11 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 		case 0x01: // CodeInfo: 0x01 | codeID(8 bytes, big-endian)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
+				if err != nil {
+					if shouldRetryWithoutHeight(err) {
+						resp, err = c.wasmClient.Code(ctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
+					}
+				}
 				if err != nil {
 					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such code") {
 						return nil, nil
@@ -187,6 +214,11 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
 				if err != nil {
+					if shouldRetryWithoutHeight(err) {
+						resp, err = c.wasmClient.Code(ctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
+					}
+				}
+				if err != nil {
 					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such code") {
 						return nil, nil
 					}
@@ -207,6 +239,14 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 					Address:   addr,
 					QueryData: suffix,
 				})
+				if err != nil {
+					if shouldRetryWithoutHeight(err) {
+						resp, err = c.wasmClient.RawContractState(ctx, &wasmtypes.QueryRawContractStateRequest{
+							Address:   addr,
+							QueryData: suffix,
+						})
+					}
+				}
 				if err != nil {
 					low := strings.ToLower(err.Error())
 					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
