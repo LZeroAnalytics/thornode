@@ -45,14 +45,14 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
+	if f.storeKey == "wasm" {
+		return true
+	}
 	if f.sdkCtx != nil {
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
 			fmt.Printf("[forking] checking tx\n")
 			return false
 		}
-	}
-	if f.storeKey == "wasm" {
-		return true
 	}
 
 	if f.service.IsGenesisMode() {
