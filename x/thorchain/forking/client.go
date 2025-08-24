@@ -124,9 +124,19 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			return nil, nil
 		}
 		switch key[0] {
-		case 0x02: // ContractInfo
+		case 0x02: // ContractInfo: 0x02 | addrLen | addrBytes
+			if addr, ok := c.parseWasmContractAddr(key[1:]); ok {
+				resp, err := c.wasmClient.ContractInfo(ctx, &wasmtypes.QueryContractInfoRequest{Address: addr})
+				if err != nil {
+					if isNotFoundErr(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm ContractInfo: %w", err)
+				}
+				return c.codec.Marshal(&resp.ContractInfo)
+			}
 			return nil, nil
-		case 0x01: // CodeInfo
+		case 0x01: // CodeInfo (not required for our current paths) - skip
 			return nil, nil
 		case 0x03: // CodeBytes: 0x03 | codeID(8be)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
