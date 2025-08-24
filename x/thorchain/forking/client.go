@@ -166,14 +166,29 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 					return nil, nil
 				}
 				ci := wasmtypes.CodeInfo{
-					CodeHash:              resp.DataHash,
-					Creator:               resp.Creator,
-					InstantiateConfig:     resp.InstantiatePermission,
+					CodeHash:          resp.DataHash,
+					Creator:           resp.Creator,
+					InstantiateConfig: resp.InstantiatePermission,
 				}
 				return c.codec.Marshal(&ci)
 			}
 			return nil, nil
-		case 0x03: // ContractStore: 0x03 | addr (20 or 32) | key...
+		case 0x03: // CodeBytes: 0x03 | codeID(8 bytes, big-endian)
+			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
+				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
+				if err != nil {
+					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such code") {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm CodeBytes: %w", err)
+				}
+				if resp == nil || len(resp.Data) == 0 {
+					return nil, nil
+				}
+				return resp.Data, nil
+			}
+			return nil, nil
+		case 0x05: // ContractStore: 0x05 | addr | key...
 			if addr, suffix, ok := c.parseWasmContractStoreKeyNoLen(key[1:]); ok {
 				if len(suffix) == 0 {
 					return nil, nil
