@@ -124,35 +124,9 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			return nil, nil
 		}
 		switch key[0] {
-		case 0x02: // ContractInfo: 0x02 | addrLen | addrBytes
-			if addr, ok := c.parseWasmContractAddr(key[1:]); ok {
-				resp, err := c.wasmClient.ContractInfo(ctx, &wasmtypes.QueryContractInfoRequest{Address: addr})
-				if err != nil {
-					if isNotFoundErr(err) {
-						return nil, nil
-					}
-					return nil, fmt.Errorf("wasm ContractInfo: %w", err)
-				}
-				if resp == nil || resp.ContractInfo == nil {
-					return nil, nil
-				}
-				return c.codec.Marshal(resp.ContractInfo)
-			}
+		case 0x02: // ContractInfo
 			return nil, nil
-		case 0x01: // CodeInfo: 0x01 | codeID(8be)
-			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
-				resp, err := c.wasmClient.Code(ctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
-				if err != nil {
-					if isNotFoundErr(err) {
-						return nil, nil
-					}
-					return nil, fmt.Errorf("wasm CodeInfo: %w", err)
-				}
-				if resp == nil || resp.CodeInfo == nil {
-					return nil, nil
-				}
-				return c.codec.Marshal(resp.CodeInfo)
-			}
+		case 0x01: // CodeInfo
 			return nil, nil
 		case 0x03: // CodeBytes: 0x03 | codeID(8be)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
