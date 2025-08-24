@@ -139,7 +139,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			return nil, nil
 		}
 		switch key[0] {
-		case 0x02:
+		case 0x02: // ContractInfo: 0x02 | addr (no length prefix)
 			b := key[1:]
 			if addr, ok := c.parseWasmContractAddrStrict(b); ok {
 				resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
@@ -153,9 +153,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				return c.codec.Marshal(&resp.ContractInfo)
 			}
 			return nil, nil
-		case 0x01: // CodeInfo (not required for our current paths) - skip
-			return nil, nil
-		case 0x03: // CodeBytes: 0x03 | codeID(8be)
+		case 0x01: // Code: 0x01 | codeID(8 bytes, big-endian)
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
 				if err != nil {
@@ -170,9 +168,8 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				return resp.Data, nil
 			}
 			return nil, nil
-		case 0x05: // ContractStore: 0x05 | addrLen | addrBytes | key...
-			if addr, suffix, ok := c.parseWasmContractStoreKey(key[1:]); ok {
-				fmt.Printf("[forking][WASM][Raw] addr=%s suffix_len=%d height=%d\n", addr, len(suffix), height)
+		case 0x03: // ContractStore: 0x03 | addr (20 or 32) | key...
+			if addr, suffix, ok := c.parseWasmContractStoreKeyNoLen(key[1:]); ok {
 				if len(suffix) == 0 {
 					return nil, nil
 				}
@@ -182,17 +179,14 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				})
 				if err != nil {
 					low := strings.ToLower(err.Error())
-					fmt.Printf("[forking][WASM][Raw] miss addr=%s err=%s\n", addr, low)
 					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
 						return nil, nil
 					}
 					return nil, fmt.Errorf("wasm RawContractState: %w", err)
 				}
 				if resp == nil || len(resp.Data) == 0 {
-					fmt.Printf("[forking][WASM][Raw] empty addr=%s\n", addr)
 					return nil, nil
 				}
-				fmt.Printf("[forking][WASM][Raw] hit addr=%s bytes=%d\n", addr, len(resp.Data))
 				return resp.Data, nil
 			}
 			return nil, nil
@@ -1024,28 +1018,8 @@ func (c *remoteClient) parseWasmContractAddrCandidates(b []byte) []string {
 	return dedup
 }
 func (c *remoteClient) parseWasmContractAddrStrict(b []byte) (string, bool) {
-	if len(b) == 0 {
-		return "", false
-	}
-	if ln, n := protowire.ConsumeVarint(b); n > 0 && len(b) >= n+int(ln) {
-		if int(ln) == 20 {
-			addrBz := b[n : n+20]
-			return cosmos.AccAddress(addrBz).String(), true
-		}
-		seg := b[n : n+int(ln)]
-		if len(seg) >= 6 && (seg[0] == 't' && seg[1] == 'h' && seg[2] == 'o' && seg[3] == 'r' && seg[4] == '1') {
-			if bech := string(seg); bech != "" {
-				if addr, err := cosmos.AccAddressFromBech32(bech); err == nil {
-					return addr.String(), true
-				}
-			}
-		}
-	}
-	if len(b) == 20 {
+	if len(b) == 20 || len(b) == 32 {
 		return cosmos.AccAddress(b).String(), true
-	}
-	if len(b) == 21 && b[0] == 0x14 {
-		return cosmos.AccAddress(b[1:21]).String(), true
 	}
 	return "", false
 }
@@ -1112,6 +1086,22 @@ func (c *remoteClient) makeWasmContractStorePrefix(addr string) []byte {
 	prefix := append(lenPrefix, bz...)
 	return prefix
 }
+func (c *remoteClient) parseWasmContractStoreKeyNoLen(b []byte) (string, []byte, bool) {
+	if len(b) > 32 {
+		addrBz := b[:32]
+		if addr, ok := c.parseWasmContractAddrStrict(addrBz); ok {
+			return addr, b[32:], true
+		}
+	}
+	if len(b) > 20 {
+		addrBz := b[:20]
+		if addr, ok := c.parseWasmContractAddrStrict(addrBz); ok {
+			return addr, b[20:], true
+		}
+	}
+	return "", nil, false
+}
+
 
 
 func (c *remoteClient) Close() error {
