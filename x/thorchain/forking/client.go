@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"encoding/binary"
+
 
 	storepb "cosmossdk.io/api/cosmos/store/v1beta1"
 	sdkmath "cosmossdk.io/math"
@@ -19,6 +21,8 @@ import (
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/types/query"
+
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/codes"
 
@@ -115,6 +119,82 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 	keyStr := string(key)
 	lkey := strings.ToLower(keyStr)
 	lstore := strings.ToLower(storeKey)
+	if lstore == strings.ToLower(wasmtypes.StoreKey) {
+		if len(key) == 0 {
+			return nil, nil
+		}
+		switch key[0] {
+		case 0x02: // ContractInfo: 0x02 | addrLen | addrBytes
+			if addr, ok := c.parseWasmContractAddr(key[1:]); ok {
+				resp, err := c.wasmClient.ContractInfo(ctx, &wasmtypes.QueryContractInfoRequest{Address: addr})
+				if err != nil {
+					if isNotFoundErr(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm ContractInfo: %w", err)
+				}
+				if resp == nil || resp.ContractInfo == nil {
+					return nil, nil
+				}
+				return c.codec.Marshal(resp.ContractInfo)
+			}
+			return nil, nil
+		case 0x01: // CodeInfo: 0x01 | codeID(8be)
+			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
+				resp, err := c.wasmClient.Code(ctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
+				if err != nil {
+					if isNotFoundErr(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm CodeInfo: %w", err)
+				}
+				if resp == nil || resp.CodeInfo == nil {
+					return nil, nil
+				}
+				return c.codec.Marshal(resp.CodeInfo)
+			}
+			return nil, nil
+		case 0x03: // CodeBytes: 0x03 | codeID(8be)
+			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
+				resp, err := c.wasmClient.Code(ctx, &wasmtypes.QueryCodeRequest{CodeId: codeID})
+				if err != nil {
+					if isNotFoundErr(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm Code bytes: %w", err)
+				}
+				if resp == nil || len(resp.Data) == 0 {
+					return nil, nil
+				}
+				return resp.Data, nil
+			}
+			return nil, nil
+		case 0x05: // ContractStore: 0x05 | addrLen | addrBytes | key...
+			if addr, suffix, ok := c.parseWasmContractStoreKey(key[1:]); ok {
+				if len(suffix) == 0 {
+					return nil, nil
+				}
+				resp, err := c.wasmClient.RawContractState(ctx, &wasmtypes.QueryRawContractStateRequest{
+					Address:   addr,
+					QueryData: suffix,
+				})
+				if err != nil {
+					if isNotFoundErr(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm RawContractState: %w", err)
+				}
+				if resp == nil || len(resp.Data) == 0 {
+					return nil, nil
+				}
+				return resp.Data, nil
+			}
+			return nil, nil
+		default:
+			return nil, nil
+		}
+	}
+
 
 	switch {
 	case strings.Contains(lkey, "mimir//"):
@@ -631,6 +711,7 @@ func (c *remoteClient) GetLatestHeight(ctx context.Context) (int64, error) {
 	return 0, fmt.Errorf("no block data available")
 }
 
+
 func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end []byte, height int64) ([]KeyValue, error) {
 	if storeKey == "thorchain" {
 		if len(start) > 0 {
@@ -650,6 +731,42 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 			}
 		}
 	}
+	if strings.EqualFold(storeKey, wasmtypes.StoreKey) {
+		if len(start) >= 2 && start[0] == 0x05 {
+			if addr, _, ok := c.parseWasmContractStoreKey(start[1:]); ok {
+				var out []KeyValue
+				var pageKey []byte
+				for {
+					resp, err := c.wasmClient.AllContractState(ctx, &wasmtypes.QueryAllContractStateRequest{
+						Address: addr,
+						Pagination: &query.PageRequest{
+							Key:   pageKey,
+							Limit: 1000,
+						},
+					})
+					if err != nil {
+						return nil, fmt.Errorf("wasm AllContractState: %w", err)
+					}
+					if resp == nil {
+						break
+					}
+					prefix := c.makeWasmContractStorePrefix(addr)
+					for _, m := range resp.Models {
+						k := append(append([]byte{0x05}, prefix...), m.Key...)
+						v := append([]byte(nil), m.Value...)
+						out = append(out, KeyValue{Key: k, Value: v})
+					}
+					if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
+						break
+					}
+					pageKey = resp.Pagination.NextKey
+				}
+				return out, nil
+			}
+		}
+		return []KeyValue{}, nil
+	}
+
 
 	switch storeKey {
 	case "pools":
@@ -667,6 +784,7 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 	}
 	resp, err := c.queryClient.Pools(ctx, req)
 	if err != nil {
+
 		return nil, fmt.Errorf("gRPC pools range query failed: %w", err)
 	}
 
@@ -853,6 +971,50 @@ func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
 
 	return pairs, nil
 }
+func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
+	if len(b) == 0 {
+		return "", false
+	}
+	l := int(b[0])
+	if len(b) < 1+l {
+		return "", false
+	}
+	addrBz := b[1 : 1+l]
+	return cosmos.AccAddress(addrBz).String(), true
+}
+
+func (c *remoteClient) parseWasmCodeID(b []byte) (uint64, bool) {
+	if len(b) < 8 {
+		return 0, false
+	}
+	return binary.BigEndian.Uint64(b[:8]), true
+}
+
+func (c *remoteClient) parseWasmContractStoreKey(b []byte) (string, []byte, bool) {
+	if len(b) == 0 {
+		return "", nil, false
+	}
+	l := int(b[0])
+	if len(b) < 1+l {
+		return "", nil, false
+	}
+	addrBz := b[1 : 1+l]
+	suffix := b[1+l:]
+	return cosmos.AccAddress(addrBz).String(), suffix, true
+}
+
+func (c *remoteClient) makeWasmContractStorePrefix(addr string) []byte {
+	acc, err := cosmos.AccAddressFromBech32(addr)
+	if err != nil {
+		return nil
+	}
+	bz := []byte(acc)
+	prefix := make([]byte, 1+len(bz))
+	prefix[0] = byte(len(bz))
+	copy(prefix[1:], bz)
+	return prefix
+}
+
 
 func (c *remoteClient) Close() error {
 	if c.grpcConn != nil {
