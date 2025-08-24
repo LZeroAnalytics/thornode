@@ -9,6 +9,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 )
 
 func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) error {
@@ -35,8 +36,18 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		}
 	}
 
-	_ = app.WasmKeeper.UnpinCode(ctx, codeID)
-	if pinErr := app.WasmKeeper.PinCode(ctx, codeID); pinErr != nil {
+	authority := app.WasmKeeper.GetAuthority()
+	msgSrv := wasmkeeper.NewMsgServerImpl(&app.WasmKeeper)
+
+	_, _ = msgSrv.UnpinCodes(sdk.WrapSDKContext(ctx), &wasmtypes.MsgUnpinCodes{
+		Authority: authority,
+		CodeIDs:   []uint64{codeID},
+	})
+
+	if _, pinErr := msgSrv.PinCodes(sdk.WrapSDKContext(ctx), &wasmtypes.MsgPinCodes{
+		Authority: authority,
+		CodeIDs:   []uint64{codeID},
+	}); pinErr != nil {
 		return pinErr
 	}
 	return nil
