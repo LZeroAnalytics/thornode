@@ -143,7 +143,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			if addr, ok := c.parseWasmContractAddr(key[1:]); ok {
 				resp, err := c.wasmClient.ContractInfo(c.ctxWithHeight(ctx, height), &wasmtypes.QueryContractInfoRequest{Address: addr})
 				if err != nil {
-					if isNotFoundErr(err) {
+					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such contract") {
 						return nil, nil
 					}
 					return nil, fmt.Errorf("wasm ContractInfo: %w", err)
@@ -157,7 +157,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
 				if err != nil {
-					if isNotFoundErr(err) {
+					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such code") {
 						return nil, nil
 					}
 					return nil, fmt.Errorf("wasm Code bytes: %w", err)
@@ -178,7 +178,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 					QueryData: suffix,
 				})
 				if err != nil {
-					if isNotFoundErr(err) {
+					if isNotFoundErr(err) || strings.Contains(strings.ToLower(err.Error()), "no such contract") {
 						return nil, nil
 					}
 					return nil, fmt.Errorf("wasm RawContractState: %w", err)
@@ -971,19 +971,15 @@ func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
 	return pairs, nil
 }
 func (c *remoteClient) parseWasmContractAddr(b []byte) (string, bool) {
-	if len(b) == 0 {
-		return "", false
-	}
 	if len(b) == 20 {
 		return cosmos.AccAddress(b).String(), true
 	}
-	l := int(b[0])
-	if l > 0 && len(b) >= 1+l {
-		addrBz := b[1 : 1+l]
-		return cosmos.AccAddress(addrBz).String(), true
-	}
-	if len(b) > 20 {
-		return cosmos.AccAddress(b[:20]).String(), true
+	if len(b) >= 1 {
+		l := int(b[0])
+		if l > 0 && len(b) == 1+l {
+			addrBz := b[1 : 1+l]
+			return cosmos.AccAddress(addrBz).String(), true
+		}
 	}
 	return "", false
 }
@@ -996,10 +992,7 @@ func (c *remoteClient) parseWasmCodeID(b []byte) (uint64, bool) {
 }
 
 func (c *remoteClient) parseWasmContractStoreKey(b []byte) (string, []byte, bool) {
-	if len(b) == 0 {
-		return "", nil, false
-	}
-	if len(b) >= 21 {
+	if len(b) >= 1 {
 		l := int(b[0])
 		if l > 0 && len(b) >= 1+l {
 			addrBz := b[1 : 1+l]
