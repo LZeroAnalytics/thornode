@@ -85,8 +85,41 @@ func (w *WasmQueryWrapper) Codes(ctx context.Context, req *wasmtypes.QueryCodesR
 func (w *WasmQueryWrapper) PinnedCodes(ctx context.Context, req *wasmtypes.QueryPinnedCodesRequest) (*wasmtypes.QueryPinnedCodesResponse, error) {
 	return w.original.PinnedCodes(ctx, req)
 }
-func (w *WasmQueryWrapper) ContractInfo(ctx context.Context, req *wasmtypes.QueryContractInfoRequest) (*wasmtypes.QueryContractInfoResponse, error) {
-	return w.original.ContractInfo(ctx, req)
+func (w *WasmQueryWrapper) ContractInfo(goCtx context.Context, req *wasmtypes.QueryContractInfoRequest) (*wasmtypes.QueryContractInfoResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	addr := sdk.MustAccAddressFromBech32(req.Address)
+	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
+		return &wasmtypes.QueryContractInfoResponse{Address: req.Address, ContractInfo: *ci}, nil
+	}
+	target := "grpc.thor.pfc.zone:443"
+	useTLS := false
+	normalized := strings.TrimSpace(target)
+	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
+		useTLS = true
+		normalized = strings.TrimPrefix(strings.TrimPrefix(normalized, "grpcs://"), "https://")
+	} else {
+		if _, p, e := net.SplitHostPort(normalized); e == nil && p == "443" {
+			useTLS = true
+		}
+	}
+	var dialOpt grpc.DialOption
+	if useTLS {
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+	} else {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	conn, err := grpc.Dial(normalized, dialOpt)
+	if err != nil {
+		return w.original.ContractInfo(goCtx, req)
+	}
+	defer conn.Close()
+	wq := wasmtypes.NewQueryClient(conn)
+	resp, err := wq.ContractInfo(goCtx, &wasmtypes.QueryContractInfoRequest{Address: req.Address})
+	if err != nil || resp == nil {
+		return w.original.ContractInfo(goCtx, req)
+	}
+	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
+	return resp, nil
 }
 func (w *WasmQueryWrapper) ContractHistory(ctx context.Context, req *wasmtypes.QueryContractHistoryRequest) (*wasmtypes.QueryContractHistoryResponse, error) {
 	return w.original.ContractHistory(ctx, req)
