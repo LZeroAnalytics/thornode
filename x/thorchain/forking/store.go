@@ -108,8 +108,10 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	height := f.service.GetPinnedHeight()
 	fmt.Printf("[forking][GET] pinned-height=%d store=%s key=%s\n", height, f.storeKey, hex.EncodeToString(key))
 	if height == 0 {
-		fmt.Printf("[forking][GET] remote-disabled(height=0) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
-		return nil, nil
+		if f.storeKey != "wasm" {
+			fmt.Printf("[forking][GET] remote-disabled(height=0) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
+			return nil, nil
+		}
 	}
 
 	fmt.Printf("[forking][GET] remote-fetch store=%s key=%s height=%d\n", f.storeKey, hex.EncodeToString(key), height)
@@ -226,7 +228,7 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 	}
 
 	height := f.service.GetPinnedHeight()
-	if height == 0 || f.remoteClient == nil {
+	if (height == 0 && f.storeKey != "wasm") || f.remoteClient == nil {
 		return &EmptyIterator{}, nil
 	}
 
