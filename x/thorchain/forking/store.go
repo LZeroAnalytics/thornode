@@ -86,13 +86,17 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	if f.config.CacheEnabled {
 		if cached := f.cache.Get(key); cached != nil {
 			if len(cached) == 0 {
-				fmt.Printf("[forking][GET] negative-cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
+				if f.storeKey == "wasm" {
+				} else {
+					fmt.Printf("[forking][GET] negative-cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
+					f.service.updateStats(false, true, 0, false)
+					return nil, nil
+				}
+			} else {
+				fmt.Printf("[forking][GET] cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 				f.service.updateStats(false, true, 0, false)
-				return nil, nil
+				return cached, nil
 			}
-			fmt.Printf("[forking][GET] cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
-			f.service.updateStats(false, true, 0, false)
-			return cached, nil
 		}
 	}
 
@@ -127,7 +131,9 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	if v == nil {
 		fmt.Printf("[forking][GET] remote-miss store=%s key=%s height=%d duration=%v\n", f.storeKey, hex.EncodeToString(key), height, duration)
 		if f.config.CacheEnabled {
-			f.cache.Set(key, []byte{})
+			if f.storeKey != "wasm" {
+				f.cache.Set(key, []byte{})
+			}
 		}
 	} else {
 		fmt.Printf("[forking][GET] remote-success store=%s key=%s height=%d duration=%v size=%d bytes\n", f.storeKey, hex.EncodeToString(key), height, duration, len(v))
