@@ -156,9 +156,97 @@ func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtype
 	return wq.RawContractState(qctx, req)
 }
 
-func (w *WasmQueryWrapper) Code(ctx context.Context, req *wasmtypes.QueryCodeRequest) (*wasmtypes.QueryCodeResponse, error) {
-	return w.original.Code(ctx, req)
+func (w *WasmQueryWrapper) Code(goCtx context.Context, req *wasmtypes.QueryCodeRequest) (*wasmtypes.QueryCodeResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	resp, err := w.original.Code(goCtx, req)
+	if err == nil && resp != nil && len(resp.Data) > 0 {
+		_ = w.app.materializeAndPinWasm(ctx, req.CodeId)
+		return resp, nil
+	}
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
+	useTLS := false
+	normalized := strings.TrimSpace(target)
+	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
+		useTLS = true
+		normalized = strings.TrimPrefix(strings.TrimPrefix(normalized, "grpcs://"), "https://")
+	} else {
+		if _, p, e := net.SplitHostPort(normalized); e == nil && p == "443" {
+			useTLS = true
+		}
+	}
+	var dialOpt grpc.DialOption
+	if useTLS {
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+	} else {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	conn, derr := grpc.Dial(normalized, dialOpt)
+	if derr != nil {
+		return resp, err
+	}
+	defer conn.Close()
+	wq := wasmtypes.NewQueryClient(conn)
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(goCtx, md)
+	rem, rerr := wq.Code(qctx, req)
+	if rerr == nil && rem != nil && len(rem.Data) > 0 {
+		_ = w.app.materializeAndPinWasm(ctx, req.CodeId)
+		return rem, nil
+	}
+	return resp, err
 }
+
+func (w *WasmQueryWrapper) CodeInfo(goCtx context.Context, req *wasmtypes.QueryCodeRequest) (*wasmtypes.QueryCodeResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	resp, err := w.original.Code(goCtx, req)
+	if err == nil && resp != nil {
+		return resp, nil
+	}
+	target := w.app.forkGRPC
+	if strings.TrimSpace(target) == "" {
+		target = "grpc.thor.pfc.zone:443"
+	}
+	useTLS := false
+	normalized := strings.TrimSpace(target)
+	if strings.HasPrefix(normalized, "grpcs://") || strings.HasPrefix(normalized, "https://") {
+		useTLS = true
+		normalized = strings.TrimPrefix(strings.TrimPrefix(normalized, "grpcs://"), "https://")
+	} else {
+		if _, p, e := net.SplitHostPort(normalized); e == nil && p == "443" {
+			useTLS = true
+		}
+	}
+	var dialOpt grpc.DialOption
+	if useTLS {
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+	} else {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	conn, derr := grpc.Dial(normalized, dialOpt)
+	if derr != nil {
+		return resp, err
+	}
+	defer conn.Close()
+	wq := wasmtypes.NewQueryClient(conn)
+	md := metadata.New(nil)
+	if w.app.forkHeight > 0 {
+		md.Set("x-cosmos-block-height", fmt.Sprintf("%d", w.app.forkHeight))
+	}
+	qctx := metadata.NewOutgoingContext(goCtx, md)
+	rem, rerr := wq.Code(qctx, req)
+	if rerr == nil && rem != nil {
+		_ = w.app.materializeAndPinWasm(ctx, req.CodeId)
+		return rem, nil
+	}
+	return resp, err
+}
+
 func (w *WasmQueryWrapper) Codes(ctx context.Context, req *wasmtypes.QueryCodesRequest) (*wasmtypes.QueryCodesResponse, error) {
 	return w.original.Codes(ctx, req)
 }
@@ -218,3 +306,5 @@ func (w *WasmQueryWrapper) ContractsByCode(ctx context.Context, req *wasmtypes.Q
 func (w *WasmQueryWrapper) AllContractState(ctx context.Context, req *wasmtypes.QueryAllContractStateRequest) (*wasmtypes.QueryAllContractStateResponse, error) {
 	return w.original.AllContractState(ctx, req)
 }
+
+package app
