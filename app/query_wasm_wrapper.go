@@ -304,7 +304,5 @@ func (w *WasmQueryWrapper) ContractsByCode(ctx context.Context, req *wasmtypes.Q
 	return w.original.ContractsByCode(ctx, req)
 }
 func (w *WasmQueryWrapper) AllContractState(ctx context.Context, req *wasmtypes.QueryAllContractStateRequest) (*wasmtypes.QueryAllContractStateResponse, error) {
-	return w.original.AllContractState(ctx, req)
+return w.original.AllContractState(ctx, req)
 }
-
-package app
