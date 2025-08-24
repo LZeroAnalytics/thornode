@@ -14,6 +14,7 @@ import (
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"google.golang.org/grpc"
+	"crypto/tls"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -49,7 +50,15 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		}
 		var dialOpt grpc.DialOption
 		if useTLS {
-			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+			hostForTLS := normalized
+			if h, _, e := net.SplitHostPort(normalized); e == nil {
+				hostForTLS = h
+			}
+			tlsCfg := &tls.Config{
+				ServerName: hostForTLS,
+				MinVersion: tls.VersionTLS12,
+			}
+			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 		} else {
 			dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 		}
