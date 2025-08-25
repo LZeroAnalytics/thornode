@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
@@ -69,7 +70,15 @@ func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Ad
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -117,7 +126,15 @@ func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmty
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -165,7 +182,15 @@ func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtype
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -213,7 +238,15 @@ func (w *WasmQueryWrapper) Code(goCtx context.Context, req *wasmtypes.QueryCodeR
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -261,7 +294,15 @@ func (w *WasmQueryWrapper) CodeInfo(goCtx context.Context, req *wasmtypes.QueryC
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -308,7 +349,15 @@ func (w *WasmQueryWrapper) Codes(goCtx context.Context, req *wasmtypes.QueryCode
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -357,7 +406,15 @@ func (w *WasmQueryWrapper) PinnedCodes(goCtx context.Context, req *wasmtypes.Que
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -407,7 +464,15 @@ func (w *WasmQueryWrapper) ContractInfo(goCtx context.Context, req *wasmtypes.Qu
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
