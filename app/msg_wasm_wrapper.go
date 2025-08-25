@@ -25,8 +25,11 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -163,6 +166,39 @@ func (w *WasmMsgWrapper) ExecuteContract(goCtx context.Context, req *wasmtypes.M
 	fmt.Printf("[wasm-exec] ExecuteContract addr=%s\n", req.Contract)
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	w.ensureMaterializedByAddress(ctx, req.Contract)
+
+	addr := sdk.MustAccAddressFromBech32(req.Contract)
+	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
+		codeID := ci.CodeID
+		if cinfo := w.keeper.GetCodeInfo(ctx, codeID); cinfo != nil && len(cinfo.CodeHash) > 0 {
+			hashHex := strings.ToLower(hex.EncodeToString(cinfo.CodeHash))
+			base := w.app.wasmDir
+			parent := filepath.Dir(base)
+			candidates := []string{
+				filepath.Join(base, "wasm", "wasm", hashHex+".wasm"),
+				filepath.Join(base, "wasm", hashHex+".wasm"),
+				filepath.Join(parent, "wasm", "wasm", hashHex+".wasm"),
+				filepath.Join(parent, "wasm", hashHex+".wasm"),
+				filepath.Join(base, "wasm", "wasm", hashHex),
+				filepath.Join(base, "wasm", hashHex),
+				filepath.Join(parent, "wasm", "wasm", hashHex),
+				filepath.Join(parent, "wasm", hashHex),
+			}
+			fmt.Printf("[wasm-exec] wasmDir=%s codeID=%d codeHash=%s\n", base, codeID, hashHex)
+			for _, p := range candidates {
+				if st, err := os.Stat(p); err == nil && !st.IsDir() {
+					fmt.Printf("[wasm-exec] exists: %s size=%d\n", p, st.Size())
+				} else {
+					fmt.Printf("[wasm-exec] missing: %s err=%v\n", p, err)
+				}
+			}
+		} else {
+			fmt.Printf("[wasm-exec] no CodeInfo or CodeHash for codeID=%d\n", codeID)
+		}
+	} else {
+		fmt.Printf("[wasm-exec] no ContractInfo for %s\n", req.Contract)
+	}
+
 	fmt.Printf("[wasm-exec] ExecuteContract dispatched addr=%s\n", req.Contract)
 	return w.original.ExecuteContract(goCtx, req)
 }
