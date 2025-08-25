@@ -85,7 +85,7 @@ func (w *ThorchainMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech3
 	if rerr != nil && shouldRetryWithoutHeight(rerr) {
 		resp, rerr = wq.ContractInfo(ctx.Context(), &cwtypes.QueryContractInfoRequest{Address: bech32Addr})
 	}
-	if rerr != nil || resp == nil || resp.ContractInfo == nil || resp.ContractInfo.CodeID == 0 {
+	if rerr != nil || resp == nil || resp.ContractInfo.CodeID == 0 {
 		return
 	}
 	_ = w.app.materializeAndPinWasm(ctx, resp.ContractInfo.CodeID)
