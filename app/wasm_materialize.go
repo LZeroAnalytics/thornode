@@ -131,11 +131,21 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	shaFilename := hex.EncodeToString(sum[:]) + ".wasm"
 	hashFilename := shaFilename
 
+	parentDir := filepath.Dir(app.wasmDir)
+	baseNameNoExt := strings.TrimSuffix(hashFilename, ".wasm")
 	targets := []string{
 		filepath.Join(app.wasmDir, "wasm", "wasm", hashFilename),
 		filepath.Join(app.wasmDir, "wasm", hashFilename),
 		filepath.Join(app.wasmDir, "wasm", "wasm", shaFilename),
 		filepath.Join(app.wasmDir, "wasm", shaFilename),
+		filepath.Join(parentDir, "wasm", "wasm", hashFilename),
+		filepath.Join(parentDir, "wasm", hashFilename),
+		filepath.Join(parentDir, "wasm", "wasm", shaFilename),
+		filepath.Join(parentDir, "wasm", shaFilename),
+		filepath.Join(app.wasmDir, "wasm", "wasm", baseNameNoExt),
+		filepath.Join(app.wasmDir, "wasm", baseNameNoExt),
+		filepath.Join(parentDir, "wasm", "wasm", baseNameNoExt),
+		filepath.Join(parentDir, "wasm", baseNameNoExt),
 	}
 
 	store := ctx.KVStore(app.GetKey(wasmtypes.StoreKey))
