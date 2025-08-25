@@ -134,18 +134,27 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	parentDir := filepath.Dir(app.wasmDir)
 	baseNameNoExt := strings.TrimSuffix(hashFilename, ".wasm")
 	targets := []string{
+		filepath.Join(app.wasmDir, "wasm", "state", "wasm", hashFilename),
+		filepath.Join(app.wasmDir, "wasm", "state", "wasm", baseNameNoExt),
+		filepath.Join(app.wasmDir, "wasm", "state", "wasm", shaFilename),
+
+		filepath.Join(parentDir, "wasm", "state", "wasm", hashFilename),
+		filepath.Join(parentDir, "wasm", "state", "wasm", baseNameNoExt),
+		filepath.Join(parentDir, "wasm", "state", "wasm", shaFilename),
+
 		filepath.Join(app.wasmDir, "wasm", "wasm", hashFilename),
-		filepath.Join(app.wasmDir, "wasm", hashFilename),
-		filepath.Join(app.wasmDir, "wasm", "wasm", shaFilename),
-		filepath.Join(app.wasmDir, "wasm", shaFilename),
-		filepath.Join(parentDir, "wasm", "wasm", hashFilename),
-		filepath.Join(parentDir, "wasm", hashFilename),
-		filepath.Join(parentDir, "wasm", "wasm", shaFilename),
-		filepath.Join(parentDir, "wasm", shaFilename),
 		filepath.Join(app.wasmDir, "wasm", "wasm", baseNameNoExt),
+		filepath.Join(app.wasmDir, "wasm", "wasm", shaFilename),
+		filepath.Join(app.wasmDir, "wasm", hashFilename),
 		filepath.Join(app.wasmDir, "wasm", baseNameNoExt),
+		filepath.Join(app.wasmDir, "wasm", shaFilename),
+
+		filepath.Join(parentDir, "wasm", "wasm", hashFilename),
 		filepath.Join(parentDir, "wasm", "wasm", baseNameNoExt),
+		filepath.Join(parentDir, "wasm", "wasm", shaFilename),
+		filepath.Join(parentDir, "wasm", hashFilename),
 		filepath.Join(parentDir, "wasm", baseNameNoExt),
+		filepath.Join(parentDir, "wasm", shaFilename),
 	}
 
 	store := ctx.KVStore(app.GetKey(wasmtypes.StoreKey))
