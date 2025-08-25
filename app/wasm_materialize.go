@@ -126,10 +126,8 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		}
 	}
 
-	if len(codeHash) == 0 {
-		sum := sha256.Sum256(raw)
-		codeHash = sum[:]
-	}
+	sum := sha256.Sum256(raw)
+	codeHash = sum[:]
 	shaFilename := hex.EncodeToString(codeHash) + ".wasm"
 	hashFilename := shaFilename
 
