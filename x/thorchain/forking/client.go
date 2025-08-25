@@ -882,6 +882,28 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 				return out, nil
 			}
 		}
+
+		if len(start) >= 1 && start[0] == 0x05 && len(end) >= 1 && end[0] == 0x06 {
+			var out []KeyValue
+			resp, err := c.wasmClient.PinnedCodes(c.ctxWithHeight(ctx, height), &wasmtypes.QueryPinnedCodesRequest{})
+			if err != nil {
+				if shouldRetryWithoutHeight(err) {
+					resp, err = c.wasmClient.PinnedCodes(ctx, &wasmtypes.QueryPinnedCodesRequest{})
+				}
+			}
+			if err != nil {
+				return nil, fmt.Errorf("wasm PinnedCodes: %w", err)
+			}
+			if resp != nil {
+				for _, id := range resp.CodeIDs {
+					key := make([]byte, 1+8)
+					key[0] = 0x05
+					binary.BigEndian.PutUint64(key[1:], id)
+					out = append(out, KeyValue{Key: key, Value: []byte{1}})
+				}
+			}
+			return out, nil
+		}
 		return []KeyValue{}, nil
 	}
 
