@@ -183,7 +183,7 @@ func (m WasmMgrVCUR) ExecuteContract(
 		filepath.Join("/root/.thornode/wasm", "wasm", hashHex),
 	}
 	fmt.Printf("[wasm-exec-mgr] codeID=%d codeHash=%s\n", contractInfo.CodeID, hashHex)
-	fmt.Printf("[wasm-open] canonical=%s\n", filepath.Join("/root/.thornode/data", "wasm", "wasm", hashHex+".wasm"))
+	fmt.Printf("[wasm-open] canonical=%s\n", filepath.Join("/root/.thornode/data", "wasm", "state", "wasm", hashHex+".wasm"))
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			fmt.Printf("[wasm-exec-mgr] exists: %s size=%d\n", p, st.Size())
