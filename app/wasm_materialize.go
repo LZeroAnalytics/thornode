@@ -127,32 +127,20 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	}
 
 	sum := sha256.Sum256(raw)
-	if len(codeHash) == 0 {
-		codeHash = sum[:]
-	}
+	codeHash = sum[:] // ensure CodeInfo matches the bytes written
 	shaFilename := hex.EncodeToString(sum[:]) + ".wasm"
-	var hashFilename string
-	if len(codeHash) > 0 {
-		hashFilename = hex.EncodeToString(codeHash) + ".wasm"
-	}
+	hashFilename := shaFilename
 
-	targets := []string{}
-	if hashFilename != "" {
-		targets = append(targets,
-			filepath.Join(app.wasmDir, "wasm", "wasm", hashFilename),
-			filepath.Join(app.wasmDir, "wasm", hashFilename),
-		)
-	}
-	targets = append(targets,
-		filepath.Join(app.wasmDir, "wasm", "wasm", shaFilename),
+	targets := []string{
+		filepath.Join(app.wasmDir, "wasm", hashFilename),
 		filepath.Join(app.wasmDir, "wasm", shaFilename),
-	)
+	}
 
 	store := ctx.KVStore(app.GetKey(wasmtypes.StoreKey))
 	codeKey := make([]byte, 1+8)
 	codeKey[0] = 0x01
 	binary.BigEndian.PutUint64(codeKey[1:], codeID)
-	if existing := store.Get(codeKey); existing == nil {
+	{
 		ci := wasmtypes.CodeInfo{
 			CodeHash:          codeHash,
 			Creator:           remoteCreator,
