@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
@@ -63,7 +64,15 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 	}
 	var dialOpt grpc.DialOption
 	if useTLS {
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		hostForTLS := normalized
+		if h, _, e := net.SplitHostPort(normalized); e == nil {
+			hostForTLS = h
+		}
+		tlsCfg := &tls.Config{
+			ServerName: hostForTLS,
+			MinVersion: tls.VersionTLS12,
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
 		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
