@@ -802,6 +802,54 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 		}
 	}
 	if strings.EqualFold(storeKey, wasmtypes.StoreKey) {
+		if len(start) >= 1 && start[0] == 0x01 && len(end) >= 1 && end[0] == 0x02 {
+			var out []KeyValue
+			var pageKey []byte
+			for {
+				resp, err := c.wasmClient.Codes(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodesRequest{
+					Pagination: &query.PageRequest{
+						Key:   pageKey,
+						Limit: 1000,
+					},
+				})
+				if err != nil {
+					if shouldRetryWithoutHeight(err) {
+						resp, err = c.wasmClient.Codes(ctx, &wasmtypes.QueryCodesRequest{
+							Pagination: &query.PageRequest{
+								Key:   pageKey,
+								Limit: 1000,
+							},
+						})
+					}
+				}
+				if err != nil {
+					return nil, fmt.Errorf("wasm Codes: %w", err)
+				}
+				if resp == nil {
+					break
+				}
+				for _, ci := range resp.CodeInfos {
+					key := make([]byte, 1+8)
+					key[0] = 0x01
+					binary.BigEndian.PutUint64(key[1:], ci.CodeID)
+					val, merr := c.codec.Marshal(&wasmtypes.CodeInfo{
+						CodeHash:          ci.DataHash,
+						Creator:           ci.Creator,
+						InstantiateConfig: ci.InstantiatePermission,
+					})
+					if merr == nil {
+						out = append(out, KeyValue{Key: key, Value: val})
+					}
+				}
+				if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
+					break
+				}
+				pageKey = resp.Pagination.NextKey
+			}
+			return out, nil
+		}
+
+		// Contract store prefix 0x03 | addr | key...
 		if len(start) >= 2 && start[0] == 0x03 {
 			if addr, _, ok := c.parseWasmContractStoreKeyNoLen(start[1:]); ok {
 				var out []KeyValue
