@@ -97,24 +97,29 @@ func (w *ThorchainMsgWrapper) StoreCode(ctx context.Context, req *cwtypes.MsgSto
 }
 
 func (w *ThorchainMsgWrapper) InstantiateContract(goCtx context.Context, req *cwtypes.MsgInstantiateContract) (*cwtypes.MsgInstantiateContractResponse, error) {
+	fmt.Printf("[thorchain-msg] InstantiateContract codeID=%d admin=%s\n", req.CodeID, req.Admin)
 	if _, err := w.withMaterialized(goCtx, req.CodeID); err != nil {
 	}
 	return w.original.InstantiateContract(goCtx, req)
 }
 
 func (w *ThorchainMsgWrapper) InstantiateContract2(goCtx context.Context, req *cwtypes.MsgInstantiateContract2) (*cwtypes.MsgInstantiateContract2Response, error) {
+	fmt.Printf("[thorchain-msg] InstantiateContract2 codeID=%d admin=%s\n", req.CodeID, req.Admin)
 	if _, err := w.withMaterialized(goCtx, req.CodeID); err != nil {
 	}
 	return w.original.InstantiateContract2(goCtx, req)
 }
 
 func (w *ThorchainMsgWrapper) ExecuteContract(goCtx context.Context, req *cwtypes.MsgExecuteContract) (*cwtypes.MsgExecuteContractResponse, error) {
+	fmt.Printf("[thorchain-msg] ExecuteContract contract=%s sender=%s\n", req.Contract, req.Sender)
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	w.ensureMaterializedByAddress(ctx, req.Contract)
+	fmt.Printf("[thorchain-msg] ExecuteContract dispatched contract=%s\n", req.Contract)
 	return w.original.ExecuteContract(goCtx, req)
 }
 
 func (w *ThorchainMsgWrapper) MigrateContract(goCtx context.Context, req *cwtypes.MsgMigrateContract) (*cwtypes.MsgMigrateContractResponse, error) {
+	fmt.Printf("[thorchain-msg] MigrateContract codeID=%d contract=%s\n", req.CodeID, req.Contract)
 	if _, err := w.withMaterialized(goCtx, req.CodeID); err != nil {
 	}
 	return w.original.MigrateContract(goCtx, req)
