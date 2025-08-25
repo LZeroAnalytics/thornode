@@ -558,6 +558,7 @@ func NewChainApp(
 	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
 	app.msgServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Msg", NewWasmMsgWrapper(app, &app.WasmKeeper, wasmkeeper.NewMsgServerImpl(&app.WasmKeeper)))
+	app.msgServiceRouter.AddCustomRoute("types.Msg", NewThorchainMsgWrapper(app, &app.WasmKeeper, thorchain.NewMsgServerImpl(mgrs)))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
 
