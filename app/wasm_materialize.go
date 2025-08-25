@@ -1,11 +1,15 @@
 package app
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
+	"crypto/tls"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,7 +19,6 @@ import (
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"google.golang.org/grpc"
-	"crypto/tls"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -112,7 +115,18 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		return nil
 	}
 
-	sum := sha256.Sum256(bz)
+	raw := bz
+	if len(bz) >= 2 && bz[0] == 0x1f && bz[1] == 0x8b {
+		gr, gerr := gzip.NewReader(bytes.NewReader(bz))
+		if gerr == nil {
+			defer gr.Close()
+			if ub, rerr := io.ReadAll(gr); rerr == nil && len(ub) > 0 {
+				raw = ub
+			}
+		}
+	}
+
+	sum := sha256.Sum256(raw)
 	if len(codeHash) == 0 {
 		codeHash = sum[:]
 	}
@@ -155,7 +169,7 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		}
 		if _, err := os.Stat(p); err != nil {
 			fmt.Printf("[materialize] writing wasm file: %s\n", p)
-			if writeErr := os.WriteFile(p, bz, 0o644); writeErr != nil {
+			if writeErr := os.WriteFile(p, raw, 0o644); writeErr != nil {
 				return writeErr
 			}
 		}
