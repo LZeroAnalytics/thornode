@@ -2,6 +2,10 @@ package thorchain
 
 import (
 	"encoding/base32"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
@@ -171,6 +175,22 @@ func (m WasmMgrVCUR) ExecuteContract(
 	if err := m.checkContractHalt(ctx, contractAddress); err != nil {
 		return nil, err
 	}
+	hashHex := strings.ToLower(hex.EncodeToString(codeInfo.CodeHash))
+	candidates := []string{
+		filepath.Join("/root/.thornode/data", "wasm", "wasm", hashHex+".wasm"),
+		filepath.Join("/root/.thornode/data", "wasm", "wasm", hashHex),
+		filepath.Join("/root/.thornode/wasm", "wasm", hashHex+".wasm"),
+		filepath.Join("/root/.thornode/wasm", "wasm", hashHex),
+	}
+	fmt.Printf("[wasm-exec-mgr] codeID=%d codeHash=%s\n", contractInfo.CodeID, hashHex)
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			fmt.Printf("[wasm-exec-mgr] exists: %s size=%d\n", p, st.Size())
+		} else {
+			fmt.Printf("[wasm-exec-mgr] missing: %s err=%v\n", p, err)
+		}
+	}
+
 
 	if err := m.checkChecksumHalt(ctx, codeInfo.CodeHash); err != nil {
 		return nil, err
