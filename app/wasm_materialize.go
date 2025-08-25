@@ -131,8 +131,6 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		filepath.Join(app.wasmDir, "wasm", shaFilename),
 	)
 
-	for _, p := range targets {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 	store := ctx.KVStore(app.GetKey(wasmtypes.StoreKey))
 	codeKey := make([]byte, 1+8)
 	codeKey[0] = 0x01
@@ -148,6 +146,8 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 		}
 	}
 
+	for _, p := range targets {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
 		if _, err := os.Stat(p); err != nil {
