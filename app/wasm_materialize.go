@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -28,6 +29,8 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	}
 
 	var codeHash []byte
+	var remoteCreator string
+	var remoteInst *wasmtypes.AccessConfig
 	if ci := app.WasmKeeper.GetCodeInfo(ctx, codeID); ci != nil && len(ci.CodeHash) > 0 {
 		codeHash = ci.CodeHash
 	}
@@ -95,6 +98,12 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 				if len(resp.DataHash) > 0 && len(codeHash) == 0 {
 					codeHash = resp.DataHash
 				}
+				if resp.Creator != "" && remoteCreator == "" {
+					remoteCreator = resp.Creator
+				}
+				if resp.InstantiatePermission != nil && remoteInst == nil {
+					remoteInst = resp.InstantiatePermission
+				}
 			}
 			_ = conn.Close()
 		}
@@ -126,6 +135,21 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 
 	for _, p := range targets {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	store := ctx.KVStore(app.GetKey(wasmtypes.StoreKey))
+	codeKey := make([]byte, 1+8)
+	codeKey[0] = 0x01
+	binary.BigEndian.PutUint64(codeKey[1:], codeID)
+	if existing := store.Get(codeKey); existing == nil {
+		ci := wasmtypes.CodeInfo{
+			CodeHash:          codeHash,
+			Creator:           remoteCreator,
+			InstantiateConfig: remoteInst,
+		}
+		if b, merr := app.appCodec.Marshal(&ci); merr == nil {
+			store.Set(codeKey, b)
+		}
+	}
+
 			return err
 		}
 		if _, err := os.Stat(p); err != nil {
