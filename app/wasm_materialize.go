@@ -132,7 +132,9 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 	hashFilename := shaFilename
 
 	targets := []string{
+		filepath.Join(app.wasmDir, "wasm", "wasm", hashFilename),
 		filepath.Join(app.wasmDir, "wasm", hashFilename),
+		filepath.Join(app.wasmDir, "wasm", "wasm", shaFilename),
 		filepath.Join(app.wasmDir, "wasm", shaFilename),
 	}
 
