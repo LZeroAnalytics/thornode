@@ -30,7 +30,7 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 
 	var codeHash []byte
 	var remoteCreator string
-	var remoteInst *wasmtypes.AccessConfig
+	var remoteInst wasmtypes.AccessConfig
 	if ci := app.WasmKeeper.GetCodeInfo(ctx, codeID); ci != nil && len(ci.CodeHash) > 0 {
 		codeHash = ci.CodeHash
 	}
@@ -101,9 +101,7 @@ func (app *THORChainApp) materializeAndPinWasm(ctx sdk.Context, codeID uint64) e
 				if resp.Creator != "" && remoteCreator == "" {
 					remoteCreator = resp.Creator
 				}
-				if resp.InstantiatePermission != nil && remoteInst == nil {
-					remoteInst = resp.InstantiatePermission
-				}
+				remoteInst = resp.InstantiatePermission
 			}
 			_ = conn.Close()
 		}
