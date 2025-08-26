@@ -250,7 +250,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				if err != nil {
 					low := strings.ToLower(err.Error())
 					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
-						items, aerr := c.fetchAllContractState(ctx, addr, height)
+						items, aerr := c.fetchAllContractState(ctx, addr, height, key[0])
 						if aerr == nil && len(items) > 0 {
 							for _, kv := range items {
 								if bytes.Equal(kv.Key, key) {
@@ -263,7 +263,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 					return nil, fmt.Errorf("wasm RawContractState: %w", err)
 				}
 				if resp == nil || len(resp.Data) == 0 {
-					items, aerr := c.fetchAllContractState(ctx, addr, height)
+					items, aerr := c.fetchAllContractState(ctx, addr, height, key[0])
 					if aerr == nil && len(items) > 0 {
 						for _, kv := range items {
 							if bytes.Equal(kv.Key, key) {
@@ -866,10 +866,10 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 			return out, nil
 		}
 
-		// Contract store prefix 0x05 | addr | key...
-		if len(start) >= 2 && start[0] == 0x05 {
+		// Contract store prefix 0x03/0x05 | addr | key...
+		if len(start) >= 2 && (start[0] == 0x05 || start[0] == 0x03) {
 			if addr, _, ok := c.parseWasmContractStoreKeyNoLen(start[1:]); ok {
-				items, err := c.fetchAllContractState(ctx, addr, height)
+				items, err := c.fetchAllContractState(ctx, addr, height, start[0])
 				if err != nil || len(items) == 0 {
 					return []KeyValue{}, err
 				}
@@ -920,7 +920,7 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 		return []KeyValue{}, nil
 	}
 }
-func (c *remoteClient) fetchAllContractState(ctx context.Context, addr string, height int64) ([]KeyValue, error) {
+func (c *remoteClient) fetchAllContractState(ctx context.Context, addr string, height int64, prefixByte byte) ([]KeyValue, error) {
 	pg := &query.PageRequest{Limit: 200}
 	var out []KeyValue
 	for {
@@ -941,7 +941,7 @@ func (c *remoteClient) fetchAllContractState(ctx context.Context, addr string, h
 		prefix := c.makeWasmContractStorePrefix(addr)
 		for _, m := range resp.Models {
 			k := make([]byte, 0, 1+len(prefix)+len(m.Key))
-			k = append(k, 0x05)
+			k = append(k, prefixByte)
 			k = append(k, prefix...)
 			k = append(k, m.Key...)
 			out = append(out, KeyValue{Key: k, Value: m.Value})
