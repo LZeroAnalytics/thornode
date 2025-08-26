@@ -210,7 +210,51 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				return c.codec.Marshal(&ci)
 			}
 			return nil, nil
-		case 0x03: // CodeBytes: 0x03 | codeID(8 bytes, big-endian)
+		case 0x03:
+			if addr, suffix, ok := c.parseWasmContractStoreKeyNoLen(key[1:]); ok {
+				if len(suffix) == 0 {
+					return nil, nil
+				}
+				resp, err := c.wasmClient.RawContractState(c.ctxWithHeight(ctx, height), &wasmtypes.QueryRawContractStateRequest{
+					Address:   addr,
+					QueryData: suffix,
+				})
+				if err != nil {
+					if shouldRetryWithoutHeight(err) {
+						resp, err = c.wasmClient.RawContractState(ctx, &wasmtypes.QueryRawContractStateRequest{
+							Address:   addr,
+							QueryData: suffix,
+						})
+					}
+				}
+				if err != nil {
+					low := strings.ToLower(err.Error())
+					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
+						items, aerr := c.fetchAllContractState(ctx, addr, height, key[0])
+						if aerr == nil && len(items) > 0 {
+							for _, kv := range items {
+								if bytes.Equal(kv.Key, key) {
+									return kv.Value, nil
+								}
+							}
+						}
+						return nil, nil
+					}
+					return nil, fmt.Errorf("wasm RawContractState: %w", err)
+				}
+				if resp == nil || len(resp.Data) == 0 {
+					items, aerr := c.fetchAllContractState(ctx, addr, height, key[0])
+					if aerr == nil && len(items) > 0 {
+						for _, kv := range items {
+							if bytes.Equal(kv.Key, key) {
+								return kv.Value, nil
+							}
+						}
+					}
+					return nil, nil
+				}
+				return resp.Data, nil
+			}
 			if codeID, ok := c.parseWasmCodeID(key[1:]); ok {
 				resp, err := c.wasmClient.Code(c.ctxWithHeight(ctx, height), &wasmtypes.QueryCodeRequest{CodeId: codeID})
 				if err != nil {
