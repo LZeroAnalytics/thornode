@@ -747,30 +747,6 @@ func (c *remoteClient) fetchRagnarokData(ctx context.Context, height int64) ([]b
 }
 
 func (c *remoteClient) extractMimirKeyFromPath(key string) string {
-	if strings.EqualFold(storeKey, wasmtypes.StoreKey) {
-		if len(start) > 0 && start[0] == 0x05 {
-			if addr, _, ok := c.parseWasmContractStoreKeyNoLen(start[1:]); ok {
-				items, err := c.fetchAllContractState(ctx, addr, height)
-				if err != nil {
-					return nil, err
-				}
-				if len(items) == 0 {
-					return nil, nil
-				}
-				if len(start) > 0 || len(end) > 0 {
-					var filtered []KeyValue
-					for _, kv := range items {
-						if (len(start) == 0 || bytes.Compare(kv.Key, start) >= 0) && (len(end) == 0 || bytes.Compare(kv.Key, end) < 0) {
-							filtered = append(filtered, kv)
-						}
-					}
-					return filtered, nil
-				}
-				return items, nil
-			}
-		}
-	}
-
 	if strings.HasPrefix(key, "mimir//") {
 		return strings.TrimPrefix(key, "mimir//")
 	}
