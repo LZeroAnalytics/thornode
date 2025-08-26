@@ -847,17 +847,21 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 	if storeKey == "thorchain" {
 		if len(start) > 0 {
 			if strings.HasPrefix(string(start), "pool/") {
+				fmt.Printf("[forking][RANGE][thorchain] pools via gRPC height=%d\n", height)
 				return c.getRangeViaPoolsGRPC(ctx, height)
 			}
 			if strings.HasPrefix(string(start), "node_account/") {
+				fmt.Printf("[forking][RANGE][thorchain] nodes via gRPC height=%d\n", height)
 				return c.getRangeViaNodesGRPC(ctx, height)
 			}
 		}
 		if len(end) > 0 {
 			if strings.HasPrefix(string(end), "pool/") {
+				fmt.Printf("[forking][RANGE][thorchain] pools via gRPC (end) height=%d\n", height)
 				return c.getRangeViaPoolsGRPC(ctx, height)
 			}
 			if strings.HasPrefix(string(end), "node_account/") {
+				fmt.Printf("[forking][RANGE][thorchain] nodes via gRPC (end) height=%d\n", height)
 				return c.getRangeViaNodesGRPC(ctx, height)
 			}
 		}
@@ -1005,12 +1009,13 @@ func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) (
 	}
 	resp, err := c.queryClient.Pools(ctx, req)
 	if err != nil {
-
+		fmt.Printf("[forking][RANGE][thorchain] gRPC pools error height=%d err=%v\n", height, err)
 		return nil, fmt.Errorf("gRPC pools range query failed: %w", err)
 	}
 
 	var kvPairs []KeyValue
 	for _, p := range resp.Pools {
+		fmt.Printf("[forking][RANGE][thorchain] pool %s status=%s\n", p.Asset, p.Status)
 		asset, err := common.NewAsset(p.Asset)
 		if err != nil {
 			continue
