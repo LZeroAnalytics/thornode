@@ -52,6 +52,9 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	if f.storeKey == "wasm" {
 		return true
 	}
+	if f.storeKey == "thorchain" || f.storeKey == "bank" || f.storeKey == "auth" {
+		return true
+	}
 
 	if f.sdkCtx != nil {
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
