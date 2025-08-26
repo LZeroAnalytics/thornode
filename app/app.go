@@ -509,8 +509,7 @@ func NewChainApp(
 	wasmOpts = append(wasmOpts,
 		wasmkeeper.WithQueryPlugins(
 			&wasmkeeper.QueryPlugins{
-				Grpc: wasmkeeper.AcceptListGrpcQuerier(
-					wasmAcceptedQueries,
+				Grpc: wasmkeeper.AcceptAllGrpcQuerier(
 					app.BaseApp.GRPCQueryRouter(),
 					app.appCodec),
 			},
