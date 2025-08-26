@@ -1,6 +1,7 @@
 package forking
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -26,7 +27,6 @@ import (
 
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/codes"
-
 )
 
 type remoteClient struct {
@@ -250,11 +250,27 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 				if err != nil {
 					low := strings.ToLower(err.Error())
 					if isNotFoundErr(err) || strings.Contains(low, "no such contract") {
+						items, aerr := c.fetchAllContractState(ctx, addr, height)
+						if aerr == nil && len(items) > 0 {
+							for _, kv := range items {
+								if bytes.Equal(kv.Key, key) {
+									return kv.Value, nil
+								}
+							}
+						}
 						return nil, nil
 					}
 					return nil, fmt.Errorf("wasm RawContractState: %w", err)
 				}
 				if resp == nil || len(resp.Data) == 0 {
+					items, aerr := c.fetchAllContractState(ctx, addr, height)
+					if aerr == nil && len(items) > 0 {
+						for _, kv := range items {
+							if bytes.Equal(kv.Key, key) {
+								return kv.Value, nil
+							}
+						}
+					}
 					return nil, nil
 				}
 				return resp.Data, nil
@@ -267,6 +283,7 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 
 
 	switch {
+
 	case strings.Contains(lkey, "mimir//"):
 		return c.fetchMimirData(ctx, keyStr, height)
 	case strings.Contains(lkey, "ragnarok"):
@@ -730,6 +747,30 @@ func (c *remoteClient) fetchRagnarokData(ctx context.Context, height int64) ([]b
 }
 
 func (c *remoteClient) extractMimirKeyFromPath(key string) string {
+	if strings.EqualFold(storeKey, wasmtypes.StoreKey) {
+		if len(start) > 0 && start[0] == 0x05 {
+			if addr, _, ok := c.parseWasmContractStoreKeyNoLen(start[1:]); ok {
+				items, err := c.fetchAllContractState(ctx, addr, height)
+				if err != nil {
+					return nil, err
+				}
+				if len(items) == 0 {
+					return nil, nil
+				}
+				if len(start) > 0 || len(end) > 0 {
+					var filtered []KeyValue
+					for _, kv := range items {
+						if (len(start) == 0 || bytes.Compare(kv.Key, start) >= 0) && (len(end) == 0 || bytes.Compare(kv.Key, end) < 0) {
+							filtered = append(filtered, kv)
+						}
+					}
+					return filtered, nil
+				}
+				return items, nil
+			}
+		}
+	}
+
 	if strings.HasPrefix(key, "mimir//") {
 		return strings.TrimPrefix(key, "mimir//")
 	}
@@ -849,37 +890,23 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 			return out, nil
 		}
 
-		// Contract store prefix 0x03 | addr | key...
-		if len(start) >= 2 && start[0] == 0x03 {
+		// Contract store prefix 0x05 | addr | key...
+		if len(start) >= 2 && start[0] == 0x05 {
 			if addr, _, ok := c.parseWasmContractStoreKeyNoLen(start[1:]); ok {
-				var out []KeyValue
-				var pageKey []byte
-				for {
-					resp, err := c.wasmClient.AllContractState(c.ctxWithHeight(ctx, height), &wasmtypes.QueryAllContractStateRequest{
-						Address: addr,
-						Pagination: &query.PageRequest{
-							Key:   pageKey,
-							Limit: 1000,
-						},
-					})
-					if err != nil {
-						return nil, fmt.Errorf("wasm AllContractState: %w", err)
-					}
-					if resp == nil {
-						break
-					}
-					prefix := c.makeWasmContractStorePrefix(addr)
-					for _, m := range resp.Models {
-						k := append(append([]byte{0x03}, prefix...), m.Key...)
-						v := append([]byte(nil), m.Value...)
-						out = append(out, KeyValue{Key: k, Value: v})
-					}
-					if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
-						break
-					}
-					pageKey = resp.Pagination.NextKey
+				items, err := c.fetchAllContractState(ctx, addr, height)
+				if err != nil || len(items) == 0 {
+					return []KeyValue{}, err
 				}
-				return out, nil
+				if len(start) > 0 || len(end) > 0 {
+					var filtered []KeyValue
+					for _, kv := range items {
+						if (len(start) == 0 || bytes.Compare(kv.Key, start) >= 0) && (len(end) == 0 || bytes.Compare(kv.Key, end) < 0) {
+							filtered = append(filtered, kv)
+						}
+					}
+					return filtered, nil
+				}
+				return items, nil
 			}
 		}
 
@@ -917,6 +944,40 @@ func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end
 		return []KeyValue{}, nil
 	}
 }
+func (c *remoteClient) fetchAllContractState(ctx context.Context, addr string, height int64) ([]KeyValue, error) {
+	pg := &query.PageRequest{Limit: 200}
+	var out []KeyValue
+	for {
+		req := &wasmtypes.QueryAllContractStateRequest{
+			Address:    addr,
+			Pagination: pg,
+		}
+		resp, err := c.wasmClient.AllContractState(c.ctxWithHeight(ctx, height), req)
+		if err != nil && shouldRetryWithoutHeight(err) {
+			resp, err = c.wasmClient.AllContractState(ctx, req)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if resp == nil || len(resp.Models) == 0 {
+			break
+		}
+		prefix := c.makeWasmContractStorePrefix(addr)
+		for _, m := range resp.Models {
+			k := make([]byte, 0, 1+len(prefix)+len(m.Key))
+			k = append(k, 0x05)
+			k = append(k, prefix...)
+			k = append(k, m.Key...)
+			out = append(out, KeyValue{Key: k, Value: m.Value})
+		}
+		if resp.Pagination == nil || resp.Pagination.NextKey == nil || len(resp.Pagination.NextKey) == 0 {
+			break
+		}
+		pg.Key = resp.Pagination.NextKey
+	}
+	return out, nil
+}
+
 
 func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
 	req := &types.QueryPoolsRequest{
