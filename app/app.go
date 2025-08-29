@@ -813,7 +813,15 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 		}
 	})
 
-	return app.BaseApp.FinalizeBlock(req)
+	resp, err := app.BaseApp.FinalizeBlock(req)
+
+	for _, service := range app.forkingServices {
+		if e := service.EndBlock(); e != nil {
+			app.Logger().Error("failed to end block on forking service", "error", e)
+		}
+	}
+
+	return resp, err
 }
 
 func (app *THORChainApp) setPostHandler() {
@@ -832,14 +840,6 @@ func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBl
 	}
 
 	return app.ModuleManager.PreBlock(ctx)
-}
-func (app *THORChainApp) PostBlocker(ctx sdk.Context, req *abci.ResponseFinalizeBlock) (*sdk.ResponsePostBlock, error) {
-	for _, service := range app.forkingServices {
-		if err := service.EndBlock(); err != nil {
-			ctx.Logger().Error("failed to end block on forking service", "error", err)
-		}
-	}
-	return app.ModuleManager.PostBlock(ctx)
 }
 
 
