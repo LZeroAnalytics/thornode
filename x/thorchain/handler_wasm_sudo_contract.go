@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 // WasmSudoContractHandler processes incoming MsgSudoContract messages from x/wasm
@@ -46,7 +47,7 @@ func (h WasmSudoContractHandler) validate(ctx cosmos.Context, msg wasmtypes.MsgS
 
 func (h WasmSudoContractHandler) handle(ctx cosmos.Context, msg wasmtypes.MsgSudoContract) (*wasmtypes.MsgSudoContractResponse, error) {
 	ctx.Logger().Info("receive MsgSudoContract", "from", msg.Authority)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgSudoContract while THORChain is halted")
 	}
 

@@ -393,12 +393,15 @@ func NewChainApp(
 			CacheSize:       cast.ToInt(appOpts.Get("fork.cache-size")),
 			GasCostPerFetch: cast.ToUint64(appOpts.Get("fork.gas-cost-per-fetch")),
 		}
+		forking.Enabled = true
+
 		logger.Info("Forking config", "height", forkingConfig.ForkHeight, "cache_enabled", forkingConfig.CacheEnabled, "cache_size", forkingConfig.CacheSize)
 
 		app.forkGRPC = forkingGRPC
 		app.forkHeight = forkingConfig.ForkHeight
 
 		if forkingConfig.TrustingPeriod == 0 {
+
 			forkingConfig.TrustingPeriod = 24 * time.Hour
 		}
 		if forkingConfig.MaxClockDrift == 0 {
@@ -507,13 +510,6 @@ func NewChainApp(
 	fmt.Printf("[wasm-open] init wasmDir=%s homePath=%s forking=%v\n", wasmDir, homePath, forkingEnabled)
 
 	wasmOpts = append(wasmOpts,
-		wasmkeeper.WithQueryPlugins(
-			&wasmkeeper.QueryPlugins{
-				Grpc: wasmkeeper.AcceptAllGrpcQuerier(
-					app.BaseApp.GRPCQueryRouter(),
-					app.appCodec),
-			},
-		),
 		wasmkeeper.WithGasRegister(WasmGasRegister),
 	)
 

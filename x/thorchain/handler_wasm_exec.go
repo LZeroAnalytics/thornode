@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 // WasmExecHandler handles Exec memo calls from L1 integrations
@@ -43,7 +44,7 @@ func (h WasmExecHandler) validate(ctx cosmos.Context, msg MsgWasmExec) error {
 
 func (h WasmExecHandler) handle(ctx cosmos.Context, msg MsgWasmExec) (*cosmos.Result, error) {
 	ctx.Logger().Info("receive MsgWasmExec", "from", msg.Signer)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgWasmExec while THORChain is halted")
 	}
 
