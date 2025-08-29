@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 // WasmInstantiateContract2Handler processes incoming MsgInstantiateContract2 messages from x/wasm
@@ -46,7 +47,7 @@ func (h WasmInstantiateContract2Handler) validate(ctx cosmos.Context, msg wasmty
 
 func (h WasmInstantiateContract2Handler) handle(ctx cosmos.Context, msg wasmtypes.MsgInstantiateContract2) (*wasmtypes.MsgInstantiateContract2Response, error) {
 	ctx.Logger().Info("receive MsgInstantiateContract2", "from", msg.Sender)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgInstantiateContract2 while THORChain is halted")
 	}
 

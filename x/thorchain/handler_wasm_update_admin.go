@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 // WasmUpdateAdminHandler processes incoming MsgUpdateAdmin messages from x/wasm
@@ -46,7 +47,7 @@ func (h WasmUpdateAdminHandler) validate(ctx cosmos.Context, msg wasmtypes.MsgUp
 
 func (h WasmUpdateAdminHandler) handle(ctx cosmos.Context, msg wasmtypes.MsgUpdateAdmin) (*wasmtypes.MsgUpdateAdminResponse, error) {
 	ctx.Logger().Info("receive MsgUpdateAdmin", "from", msg.Sender)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgUpdateAdmin while THORChain is halted")
 	}
 
