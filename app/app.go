@@ -848,9 +848,6 @@ func (app *THORChainApp) PostBlocker(ctx sdk.Context, req *abci.ResponseFinalize
 	return app.ModuleManager.PostBlock(ctx)
 }
 
-}
-
-
 func (a *THORChainApp) Configurator() module.Configurator {
 	return a.configurator
 }
