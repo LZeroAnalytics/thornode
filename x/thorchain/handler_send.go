@@ -14,6 +14,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
@@ -191,7 +192,7 @@ func MsgSendHandleV3_0_0(ctx cosmos.Context, mgr Manager, m sdk.Msg) (*cosmos.Re
 
 	k := mgr.Keeper()
 
-	if k.IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && k.IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgSend while THORChain is halted")
 	}
 
