@@ -721,6 +721,7 @@ func NewChainApp(
 	app.SetPreBlocker(app.PreBlocker)
 	app.SetBeginBlocker(app.BeginBlocker)
 	app.SetEndBlocker(app.EndBlocker)
+	app.SetPostBlocker(app.PostBlocker)
 
 	anteHandler, err := NewAnteHandler(
 		HandlerOptions{
@@ -836,6 +837,8 @@ func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBl
 	}
 
 	return app.ModuleManager.PreBlock(ctx)
+}
+
 func (app *THORChainApp) PostBlocker(ctx sdk.Context, req *abci.ResponseFinalizeBlock) (*sdk.ResponsePostBlock, error) {
 	for _, service := range app.forkingServices {
 		if err := service.EndBlock(); err != nil {
