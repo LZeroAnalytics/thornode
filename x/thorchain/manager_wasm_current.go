@@ -12,6 +12,7 @@ import (
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 
 	errorsmod "cosmossdk.io/errors"
@@ -315,6 +316,9 @@ func (m WasmMgrVCUR) ClearAdmin(
 }
 
 func (m WasmMgrVCUR) checkGlobalHalt(ctx cosmos.Context) error {
+	if forking.Enabled {
+		return nil
+	}
 	v, err := m.keeper.GetMimir(ctx, constants.MimirKeyWasmHaltGlobal)
 	if err != nil {
 		return err
