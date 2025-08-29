@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 // WasmMigrateContractHandler processes incoming MsgMigrateContract messages from x/wasm
@@ -47,7 +48,7 @@ func (h WasmMigrateContractHandler) validate(ctx cosmos.Context, msg wasmtypes.M
 
 func (h WasmMigrateContractHandler) handle(ctx cosmos.Context, msg wasmtypes.MsgMigrateContract) (*wasmtypes.MsgMigrateContractResponse, error) {
 	ctx.Logger().Info("receive MsgMigrateContract", "from", msg.Sender)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgMigrateContract while THORChain is halted")
 	}
 
