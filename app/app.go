@@ -809,15 +809,13 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 		}
 	})
 
-	defer func() {
-		for _, service := range app.forkingServices {
-			if e := service.EndBlock(); e != nil {
-				app.Logger().Error("failed to end block on forking service", "error", e)
-			}
+	resp := app.BaseApp.FinalizeBlock(req)
+	for _, service := range app.forkingServices {
+		if e := service.EndBlock(); e != nil {
+			app.Logger().Error("failed to end block on forking service", "error", e)
 		}
-	}()
-
-	return app.BaseApp.FinalizeBlock(req)
+	}
+	return resp
 }
 
 func (app *THORChainApp) setPostHandler() {
