@@ -511,6 +511,10 @@ func NewChainApp(
 
 	wasmOpts = append(wasmOpts,
 		wasmkeeper.WithGasRegister(WasmGasRegister),
+		wasmkeeper.WithQueryPlugins(&wasmkeeper.QueryPlugins{
+			Stargate: wasmkeeper.AcceptListStargateQuerier(wasmAcceptedQueries, app.GRPCQueryRouter(), app.appCodec),
+			Grpc:     wasmkeeper.AcceptListGrpcQuerier(wasmAcceptedQueries, app.GRPCQueryRouter(), app.appCodec),
+		}),
 	)
 
 	// The last arguments can contain custom message handlers, and custom query handlers,
