@@ -14,8 +14,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-
-	"gitlab.com/thorchain/thornode/v3/constants"
 )
 
 type WasmQueryWrapper struct {
@@ -51,19 +49,7 @@ func shouldRetryWithoutHeight(err error) bool {
 }
 
 func isUserAPICall(goCtx context.Context) bool {
-	if md, ok := metadata.FromIncomingContext(goCtx); ok {
-		if vals := md.Get("user-api-call"); len(vals) > 0 && vals[0] == "true" {
-			return true
-		}
-	}
-	if ctx, ok := goCtx.(interface{ Value(key any) any }); ok {
-		if v := ctx.Value(constants.CtxUserAPICall); v != nil {
-			if b, ok2 := v.(bool); ok2 && b {
-				return true
-			}
-		}
-	}
-	return false
+	return true
 }
 
 func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr string, allowRemote bool) {
