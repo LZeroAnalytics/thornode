@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+
+	"gitlab.com/thorchain/thornode/v3/constants"
 )
 
 type WasmQueryWrapper struct {
@@ -48,10 +50,29 @@ func shouldRetryWithoutHeight(err error) bool {
 	return false
 }
 
-func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr string) {
+func isUserAPICall(goCtx context.Context) bool {
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if vals := md.Get("user-api-call"); len(vals) > 0 && vals[0] == "true" {
+			return true
+		}
+	}
+	if ctx, ok := goCtx.(interface{ Value(key any) any }); ok {
+		if v := ctx.Value(constants.CtxUserAPICall); v != nil {
+			if b, ok2 := v.(bool); ok2 && b {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr string, allowRemote bool) {
 	addr := sdk.MustAccAddressFromBech32(bech32Addr)
 	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
 		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
+		return
+	}
+	if !allowRemote {
 		return
 	}
 	target := w.app.forkGRPC
@@ -105,10 +126,13 @@ func (w *WasmQueryWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Ad
 
 func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmtypes.QuerySmartContractStateRequest) (*wasmtypes.QuerySmartContractStateResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	w.ensureMaterializedByAddress(ctx, req.Address)
+	w.ensureMaterializedByAddress(ctx, req.Address, isUserAPICall(goCtx))
 	resp, err := w.original.SmartContractState(goCtx, req)
 	if err == nil && resp != nil {
 		return resp, nil
+	}
+	if !isUserAPICall(goCtx) {
+		return resp, err
 	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
@@ -161,10 +185,13 @@ func (w *WasmQueryWrapper) SmartContractState(goCtx context.Context, req *wasmty
 
 func (w *WasmQueryWrapper) RawContractState(goCtx context.Context, req *wasmtypes.QueryRawContractStateRequest) (*wasmtypes.QueryRawContractStateResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	w.ensureMaterializedByAddress(ctx, req.Address)
+	w.ensureMaterializedByAddress(ctx, req.Address, isUserAPICall(goCtx))
 	resp, err := w.original.RawContractState(goCtx, req)
 	if err == nil && resp != nil {
 		return resp, nil
+	}
+	if !isUserAPICall(goCtx) {
+		return resp, err
 	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
@@ -222,6 +249,9 @@ func (w *WasmQueryWrapper) Code(goCtx context.Context, req *wasmtypes.QueryCodeR
 		_ = w.app.materializeAndPinWasm(ctx, req.CodeId)
 		return resp, nil
 	}
+	if !isUserAPICall(goCtx) {
+		return resp, err
+	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
 		target = "grpc.thor.pfc.zone:443"
@@ -278,6 +308,9 @@ func (w *WasmQueryWrapper) CodeInfo(goCtx context.Context, req *wasmtypes.QueryC
 	if err == nil && resp != nil {
 		return resp, nil
 	}
+	if !isUserAPICall(goCtx) {
+		return resp, err
+	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
 		target = "grpc.thor.pfc.zone:443"
@@ -332,6 +365,9 @@ func (w *WasmQueryWrapper) Codes(goCtx context.Context, req *wasmtypes.QueryCode
 	resp, err := w.original.Codes(goCtx, req)
 	if err == nil && resp != nil && len(resp.CodeInfos) > 0 {
 		return resp, nil
+	}
+	if !isUserAPICall(goCtx) {
+		return resp, err
 	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
@@ -390,6 +426,9 @@ func (w *WasmQueryWrapper) PinnedCodes(goCtx context.Context, req *wasmtypes.Que
 	if err == nil && resp != nil && len(resp.CodeIDs) > 0 {
 		return resp, nil
 	}
+	if !isUserAPICall(goCtx) {
+		return resp, err
+	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
 		target = "grpc.thor.pfc.zone:443"
@@ -447,6 +486,9 @@ func (w *WasmQueryWrapper) ContractInfo(goCtx context.Context, req *wasmtypes.Qu
 	addr := sdk.MustAccAddressFromBech32(req.Address)
 	if ci := w.keeper.GetContractInfo(ctx, addr); ci != nil {
 		return &wasmtypes.QueryContractInfoResponse{Address: req.Address, ContractInfo: *ci}, nil
+	}
+	if !isUserAPICall(goCtx) {
+		return nil, nil
 	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
