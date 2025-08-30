@@ -50,6 +50,9 @@ func (w *WasmMsgWrapper) ensureMaterializedByAddress(ctx sdk.Context, bech32Addr
 		_ = w.app.materializeAndPinWasm(ctx, ci.CodeID)
 		return
 	}
+	if ctx.IsCheckTx() {
+		return
+	}
 	target := w.app.forkGRPC
 	if strings.TrimSpace(target) == "" {
 		target = "grpc.thor.pfc.zone:443"
