@@ -801,10 +801,6 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 	app.once.Do(func() {
 		ctx := app.NewUncachedContext(false, tmproto.Header{})
 		if _, err := app.ConsensusParamsKeeper.Params(ctx, &consensusparamtypes.QueryParamsRequest{}); err != nil {
-			// prevents panic: consensus key is nil: collections: not found: key 'no_key' of type github.com/cosmos/gogoproto/tendermint.types.ConsensusParams
-			// sdk 47:
-			// Migrate Tendermint consensus parameters from x/params module to a dedicated x/consensus module.
-			// see https://github.com/cosmos/cosmos-sdk/blob/v0.47.0/simapp/upgrades.go#L66
 			baseAppLegacySS := app.GetSubspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
 			err = baseapp.MigrateParams(sdk.UnwrapSDKContext(ctx), baseAppLegacySS, app.ConsensusParamsKeeper.ParamsStore)
 			if err != nil {
@@ -812,6 +808,14 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 			}
 		}
 	})
+
+	defer func() {
+		for _, service := range app.forkingServices {
+			if e := service.EndBlock(); e != nil {
+				app.Logger().Error("failed to end block on forking service", "error", e)
+			}
+		}
+	}()
 
 	return app.BaseApp.FinalizeBlock(req)
 }
@@ -833,6 +837,7 @@ func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBl
 
 	return app.ModuleManager.PreBlock(ctx)
 }
+
 
 func (a *THORChainApp) Configurator() module.Configurator {
 	return a.configurator
