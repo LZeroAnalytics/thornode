@@ -846,23 +846,41 @@ func (c *remoteClient) GetLatestHeight(ctx context.Context) (int64, error) {
 func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end []byte, height int64) ([]KeyValue, error) {
 	if storeKey == "thorchain" {
 		if len(start) > 0 {
-			if strings.HasPrefix(string(start), "pool/") {
+			s := string(start)
+			if strings.HasPrefix(s, "pool/") {
 				fmt.Printf("[forking][RANGE][thorchain] pools via gRPC height=%d\n", height)
 				return c.getRangeViaPoolsGRPC(ctx, height)
 			}
-			if strings.HasPrefix(string(start), "node_account/") {
+			if strings.HasPrefix(s, "node_account/") {
 				fmt.Printf("[forking][RANGE][thorchain] nodes via gRPC height=%d\n", height)
 				return c.getRangeViaNodesGRPC(ctx, height)
 			}
+			if strings.HasPrefix(s, "lp/") {
+				fmt.Printf("[forking][RANGE][thorchain] LPs via gRPC height=%d\n", height)
+				return c.getRangeViaLPsGRPC(ctx, height)
+			}
+			if strings.HasPrefix(s, "mimir/") {
+				fmt.Printf("[forking][RANGE][thorchain] mimir via gRPC height=%d\n", height)
+				return c.getRangeViaMimirGRPC(ctx, height)
+			}
 		}
 		if len(end) > 0 {
-			if strings.HasPrefix(string(end), "pool/") {
+			e := string(end)
+			if strings.HasPrefix(e, "pool/") {
 				fmt.Printf("[forking][RANGE][thorchain] pools via gRPC (end) height=%d\n", height)
 				return c.getRangeViaPoolsGRPC(ctx, height)
 			}
-			if strings.HasPrefix(string(end), "node_account/") {
+			if strings.HasPrefix(e, "node_account/") {
 				fmt.Printf("[forking][RANGE][thorchain] nodes via gRPC (end) height=%d\n", height)
 				return c.getRangeViaNodesGRPC(ctx, height)
+			}
+			if strings.HasPrefix(e, "lp/") {
+				fmt.Printf("[forking][RANGE][thorchain] LPs via gRPC (end) height=%d\n", height)
+				return c.getRangeViaLPsGRPC(ctx, height)
+			}
+			if strings.HasPrefix(e, "mimir/") {
+				fmt.Printf("[forking][RANGE][thorchain] mimir via gRPC (end) height=%d\n", height)
+				return c.getRangeViaMimirGRPC(ctx, height)
 			}
 		}
 	}
@@ -1127,6 +1145,76 @@ func (c *remoteClient) getRangeViaNodesGRPC(ctx context.Context, height int64) (
 
 	return kvPairs, nil
 }
+func (c *remoteClient) getRangeViaLPsGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
+	reqPools := &types.QueryPoolsRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
+	poolsResp, err := c.queryClient.Pools(ctx, reqPools)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC LPs: pools list failed: %w", err)
+	}
+	var out []KeyValue
+	for _, p := range poolsResp.Pools {
+		if p.Asset == "" {
+			continue
+		}
+		lpsReq := &types.QueryLiquidityProvidersRequest{
+			Asset:  p.Asset,
+			Height: fmt.Sprintf("%d", height),
+		}
+		lpsResp, err := c.queryClient.LiquidityProviders(ctx, lpsReq)
+		if err != nil {
+			continue
+		}
+		asset, aerr := common.NewAsset(p.Asset)
+		if aerr != nil {
+			continue
+		}
+		for _, it := range lpsResp.LiquidityProviders {
+			var runeAddr, assetAddr common.Address
+			if it.RuneAddress != "" {
+				runeAddr, _ = common.NewAddress(it.RuneAddress)
+			}
+			if it.AssetAddress != "" {
+				assetAddr, _ = common.NewAddress(it.AssetAddress)
+			}
+			rec := types.LiquidityProvider{
+				Asset:              asset,
+				RuneAddress:        runeAddr,
+				AssetAddress:       assetAddr,
+				LastAddHeight:      it.LastAddHeight,
+				LastWithdrawHeight: it.LastWithdrawHeight,
+				Units:              sdkmath.NewUintFromString(it.Units),
+				PendingRune:        sdkmath.NewUintFromString(it.PendingRune),
+				PendingAsset:       sdkmath.NewUintFromString(it.PendingAsset),
+				RuneDepositValue:   sdkmath.NewUintFromString(it.RuneDepositValue),
+				AssetDepositValue:  sdkmath.NewUintFromString(it.AssetDepositValue),
+			}
+			key := fmt.Sprintf("lp//%s/%s", strings.ToUpper(asset.String()), strings.ToUpper(rec.GetAddress().String()))
+			val, _ := c.codec.Marshal(&rec)
+			out = append(out, KeyValue{Key: []byte(key), Value: val})
+		}
+	}
+	return out, nil
+}
+
+func (c *remoteClient) getRangeViaMimirGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
+	req := &types.QueryMimirValuesRequest{
+		Height: fmt.Sprintf("%d", height),
+	}
+	resp, err := c.queryClient.MimirValues(ctx, req)
+	if err != nil || resp == nil {
+		return []KeyValue{}, err
+	}
+	var out []KeyValue
+	for k, v := range resp.Values {
+		key := fmt.Sprintf("mimir//%s", strings.ToUpper(k))
+		val, _ := c.codec.Marshal(&keeperv1.ProtoInt64{Value: v})
+		out = append(out, KeyValue{Key: []byte(key), Value: val})
+	}
+	return out, nil
+}
+
 
 func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
 	pairs := make([]*storepb.StoreKVPair, 0, 64)
