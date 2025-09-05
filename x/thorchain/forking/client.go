@@ -1207,9 +1207,9 @@ func (c *remoteClient) getRangeViaMimirGRPC(ctx context.Context, height int64) (
 		return []KeyValue{}, err
 	}
 	var out []KeyValue
-	for k, v := range resp.Values {
-		key := fmt.Sprintf("mimir//%s", strings.ToUpper(k))
-		val, _ := c.codec.Marshal(&keeperv1.ProtoInt64{Value: v})
+	for _, m := range resp.Mimirs {
+		key := fmt.Sprintf("mimir//%s", strings.ToUpper(m.Key))
+		val, _ := c.codec.Marshal(&types.ProtoInt64{Value: m.Value})
 		out = append(out, KeyValue{Key: []byte(key), Value: val})
 	}
 	return out, nil
