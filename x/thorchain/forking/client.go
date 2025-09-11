@@ -328,7 +328,8 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 
 	switch {
 
-	case strings.Contains(lkey, "mimir//"):
+	case strings.Contains(lkey, "mimir//") || (strings.Contains(lstore, "thorchain") && strings.Contains(lkey, "/mimir/")):
+		fmt.Printf("[forking][mimir] matched key=%s height=%d\n", keyStr, height)
 		return c.fetchMimirData(ctx, keyStr, height)
 	case strings.Contains(lkey, "ragnarok"):
 		return c.fetchRagnarokData(ctx, height)
