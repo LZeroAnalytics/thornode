@@ -362,6 +362,9 @@ func (m WasmMgrVCUR) permissionedKeeper() *wasmkeeper.PermissionedKeeper {
 }
 
 func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) error {
+	if forking.Enabled {
+		return nil
+	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
@@ -379,6 +382,9 @@ func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) 
 }
 
 func (m WasmMgrVCUR) checkCanInstantiate(ctx cosmos.Context, actor cosmos.AccAddress) error {
+	if forking.Enabled {
+		return nil
+	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
