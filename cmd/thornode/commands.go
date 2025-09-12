@@ -149,6 +149,12 @@ func initRootCmd(
 				if err := serverCtx.Viper.BindPFlags(cmd.Flags()); err != nil {
 					return fmt.Errorf("fail to bind flags: %w", err)
 				}
+				if err := serverCtx.Viper.BindPFlags(cmd.PersistentFlags()); err != nil {
+					return fmt.Errorf("fail to bind persistent flags: %w", err)
+				}
+				if err := serverCtx.Viper.BindPFlags(cmd.InheritedFlags()); err != nil {
+					return fmt.Errorf("fail to bind inherited flags: %w", err)
+				}
 				return server.SetCmdServerContext(cmd, serverCtx)
 			}
 			return nil
