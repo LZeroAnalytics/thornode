@@ -152,9 +152,6 @@ func (c *remoteClient) fetchViaGRPC(ctx context.Context, storeKey string, key []
 	lkey := strings.ToLower(keyStr)
 	lstore := strings.ToLower(storeKey)
 
-	if lstore == "auth" || lstore == "bank" {
-		return nil, nil
-	}
 
 	if lstore == strings.ToLower(wasmtypes.StoreKey) {
 		if len(key) == 0 {
