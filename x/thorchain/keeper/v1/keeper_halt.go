@@ -6,9 +6,13 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 func (k KVStore) IsTradingHalt(ctx cosmos.Context, msg cosmos.Msg) bool {
+	if forking.Enabled {
+		return false
+	}
 	// consider halted if ragnarok in progress for either asset or chain gas asset
 	// gather source and target assets
 	checkAssets := []common.Asset{}
@@ -55,6 +59,9 @@ func (k KVStore) IsTradingHalt(ctx cosmos.Context, msg cosmos.Msg) bool {
 }
 
 func (k KVStore) IsGlobalTradingHalted(ctx cosmos.Context) bool {
+	if forking.Enabled {
+		return false
+	}
 	haltTrading, err := k.GetMimir(ctx, "HaltTrading")
 	if err == nil && ((haltTrading > 0 && haltTrading <= ctx.BlockHeight()) || k.RagnarokInProgress(ctx)) {
 		return true
@@ -63,6 +70,9 @@ func (k KVStore) IsGlobalTradingHalted(ctx cosmos.Context) bool {
 }
 
 func (k KVStore) IsChainTradingHalted(ctx cosmos.Context, chain common.Chain) bool {
+	if forking.Enabled {
+		return false
+	}
 	mimirKey := fmt.Sprintf("Halt%sTrading", chain)
 	haltChainTrading, err := k.GetMimir(ctx, mimirKey)
 	if err == nil && (haltChainTrading > 0 && haltChainTrading <= ctx.BlockHeight()) {
@@ -74,6 +84,9 @@ func (k KVStore) IsChainTradingHalted(ctx cosmos.Context, chain common.Chain) bo
 }
 
 func (k KVStore) IsChainHalted(ctx cosmos.Context, chain common.Chain) bool {
+	if forking.Enabled {
+		return false
+	}
 	haltChain, err := k.GetMimir(ctx, "HaltChainGlobal")
 	if err == nil && (haltChain > 0 && haltChain <= ctx.BlockHeight()) {
 		ctx.Logger().Debug("global is halt")
@@ -105,6 +118,9 @@ func (k KVStore) IsChainHalted(ctx cosmos.Context, chain common.Chain) bool {
 // TODO: This is key is named `Pause` yet behaves like a `Halt`
 // (halt from a height rather than pause until a height).
 func (k KVStore) IsLPPaused(ctx cosmos.Context, chain common.Chain) bool {
+	if forking.Enabled {
+		return false
+	}
 	// check if global LP is paused
 	pauseLPGlobal, err := k.GetMimir(ctx, "PauseLP")
 	if err == nil && pauseLPGlobal > 0 && pauseLPGlobal <= ctx.BlockHeight() {
@@ -120,6 +136,9 @@ func (k KVStore) IsLPPaused(ctx cosmos.Context, chain common.Chain) bool {
 }
 
 func (k KVStore) IsPoolDepositPaused(ctx cosmos.Context, asset common.Asset) bool {
+	if forking.Enabled {
+		return false
+	}
 	// check if deposits into pool are paused
 	v, err := k.GetMimirWithRef(ctx, constants.MimirTemplatePauseLPDeposit, asset.MimirString())
 	if err == nil && v > 0 {
@@ -129,6 +148,9 @@ func (k KVStore) IsPoolDepositPaused(ctx cosmos.Context, asset common.Asset) boo
 }
 
 func (k KVStore) IsTCYTradingHalted(ctx cosmos.Context) bool {
+	if forking.Enabled {
+		return false
+	}
 	haltTCYTrading, err := k.GetMimir(ctx, "HaltTCYTrading")
 	if err == nil && (haltTCYTrading > 0 && haltTCYTrading < ctx.BlockHeight()) {
 		ctx.Logger().Debug("TCY trading is halt")
