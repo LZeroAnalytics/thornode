@@ -58,8 +58,8 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 
 	if f.sdkCtx != nil {
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
-			fmt.Printf("[forking] CheckTx remote reads allowed\n")
-			return true
+			fmt.Printf("[forking] checking tx\n")
+			return false
 		}
 	}
 
