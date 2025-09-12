@@ -249,6 +249,8 @@ func queryCommand() *cobra.Command {
 		RunE:                       client.ValidateCmd,
 	}
 
+	forking.AddModuleInitFlags(cmd)
+
 	cmd.AddCommand(
 		rpc.QueryEventForTxCmd(),
 		server.QueryBlockCmd(),
@@ -270,6 +272,8 @@ func txCommand() *cobra.Command {
 		SuggestionsMinimumDistance: 2,
 		RunE:                       client.ValidateCmd,
 	}
+
+	forking.AddModuleInitFlags(cmd)
 
 	cmd.AddCommand(
 		authcmd.GetSignCommand(),
