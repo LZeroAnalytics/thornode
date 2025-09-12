@@ -134,10 +134,10 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
 		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
-		if f.storeKey == "wasm" {
-			return nil, nil
+		if f.config.CacheEnabled && f.storeKey != "wasm" {
+			f.cache.Set(key, []byte{})
 		}
-		return nil, err
+		return nil, nil
 	}
 
 	if v == nil {
