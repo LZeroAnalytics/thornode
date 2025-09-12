@@ -16,6 +16,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 )
@@ -53,6 +54,9 @@ func (mbd MimirBypassDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate 
 			// Validate mimir authority
 			if _, err := validateMimirAuth(ctx, mbd.keeper, *m); err != nil {
 				return ctx, err
+			}
+			if forking.Enabled {
+				ctx.Logger().Info("[forking][mimir] ante bypass", "key", m.Key, "value", m.Value)
 			}
 			// Set gas meter to infinite to bypass gas checks
 			ctx = ctx.WithGasMeter(storetypes.NewInfiniteGasMeter())
