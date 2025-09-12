@@ -139,6 +139,22 @@ func initRootCmd(
 	server.AddCommands(rootCmd, app.DefaultNodeHome, newApp, appExport, addModuleInitFlags)
 	wasmcli.ExtendUnsafeResetAllCmd(rootCmd)
 
+	forking.AddModuleInitFlags(rootCmd)
+
+	// Bind flags for any command so appOpts see them during app construction in CLI paths
+	if rootCmd.PersistentPreRunE == nil {
+		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+			serverCtx := server.GetServerContextFromCmd(cmd)
+			if serverCtx != nil {
+				if err := serverCtx.Viper.BindPFlags(cmd.Flags()); err != nil {
+					return fmt.Errorf("fail to bind flags: %w", err)
+				}
+				return server.SetCmdServerContext(cmd, serverCtx)
+			}
+			return nil
+		}
+	}
+
 	// add keybase, auxiliary RPC, query, genesis, and tx child commands
 	rootCmd.AddCommand(
 		server.StatusCommand(),
