@@ -59,7 +59,7 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	if f.sdkCtx != nil {
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
 			fmt.Printf("[forking] checking tx\n")
-			if f.storeKey == "auth" || f.storeKey == "bank" {
+			if f.storeKey == "acc" || f.storeKey == "auth" || f.storeKey == "bank" {
 				return true
 			}
 			return false
