@@ -10,6 +10,7 @@ import (
 
 // GetMimir get a mimir value from key value store
 func (k KVStore) GetMimir(ctx cosmos.Context, key string) (int64, error) {
+	key = strings.ToUpper(key)
 	record := int64(-1)
 	_, err := k.getInt64(ctx, k.GetKey(prefixMimir, key), &record)
 	return record, err
@@ -25,6 +26,7 @@ func (k KVStore) GetMimirWithRef(ctx cosmos.Context, template string, ref ...any
 
 // SetMimir save a mimir value to key value store
 func (k KVStore) SetMimir(ctx cosmos.Context, key string, value int64) {
+	key = strings.ToUpper(key)
 	k.setInt64(ctx, k.GetKey(prefixMimir, key), value)
 }
 

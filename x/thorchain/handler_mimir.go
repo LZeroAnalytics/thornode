@@ -142,6 +142,17 @@ func (h MimirHandler) handleV3_0_0(ctx cosmos.Context, msg MsgMimir) error {
 		return nil
 	}
 
+	// In forking mode, apply the value directly to mirror mainnet behavior locally.
+	if forking.Enabled {
+		h.mgr.Keeper().SetMimir(ctx, msg.Key, msg.Value)
+		ctx.Logger().Info("set_mimir ok", "key", msg.Key, "effective", msg.Value)
+		mimirEvent := NewEventSetMimir(strings.ToUpper(msg.Key), strconv.FormatInt(msg.Value, 10))
+		if err = h.mgr.EventMgr().EmitEvent(ctx, mimirEvent); err != nil {
+			ctx.Logger().Error("fail to emit set_mimir event", "error", err)
+		}
+		return nil
+	}
+
 	nodeMimirs, err := h.mgr.Keeper().GetNodeMimirs(ctx, msg.Key)
 	if err != nil {
 		ctx.Logger().Error("fail to get node mimirs", "error", err)
