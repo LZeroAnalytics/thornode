@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -507,7 +508,7 @@ func NewChainApp(
 	if err != nil {
 		panic(fmt.Sprintf("error while reading wasm config: %s", err))
 	}
-	fmt.Printf("[wasm-open] init wasmDir=%s homePath=%s forking=%v\n", wasmDir, homePath, forkingEnabled)
+	fmt.Fprintf(os.Stderr, "[wasm-open] init wasmDir=%s homePath=%s forking=%v\n", wasmDir, homePath, forkingEnabled)
 
 	wasmOpts = append(wasmOpts,
 		wasmkeeper.WithGasRegister(WasmGasRegister),
@@ -542,7 +543,7 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		wasmOpts...,
 	)
-	fmt.Printf("[wasm-open] keeper constructed with wasmDir=%s\n", wasmDir)
+	fmt.Fprintf(os.Stderr, "[wasm-open] keeper constructed with wasmDir=%s\n", wasmDir)
 
 	app.DenomKeeper = denomkeeper.NewKeeper(
 		app.appCodec,
