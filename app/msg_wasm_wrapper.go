@@ -113,7 +113,7 @@ func (w *WasmMsgWrapper) ExecuteContract(goCtx context.Context, req *wasmtypes.M
 		if cinfo := w.keeper.GetCodeInfo(ctx, codeID); cinfo != nil && len(cinfo.CodeHash) > 0 {
 			hashHex := strings.ToLower(hex.EncodeToString(cinfo.CodeHash))
 			base := w.app.wasmDir
-			fmt.Printf("[wasm-open] canonical=%s\n", filepath.Join(base, "wasm", "state", "wasm", hashHex+".wasm"))
+			fmt.Fprintf(os.Stderr, "[wasm-open] canonical=%s\n", filepath.Join(base, "wasm", "state", "wasm", hashHex+".wasm"))
 			parent := filepath.Dir(base)
 			candidates := []string{
 				filepath.Join(base, "wasm", "wasm", hashHex+".wasm"),
