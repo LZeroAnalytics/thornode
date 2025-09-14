@@ -24,6 +24,7 @@ import (
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/types/query"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/codes"
@@ -33,6 +34,7 @@ type remoteClient struct {
 	grpcConn    *grpc.ClientConn
 	queryClient types.QueryClient
 	wasmClient  wasmtypes.QueryClient
+	bankClient  banktypes.QueryClient
 	config      RemoteConfig
 	codec       codec.Codec
 }
@@ -87,11 +89,13 @@ func NewRemoteClient(config RemoteConfig, cdc codec.Codec) (RemoteClient, error)
 
 	client := types.NewQueryClient(conn)
 	wq := wasmtypes.NewQueryClient(conn)
+	bq := banktypes.NewQueryClient(conn)
 
 	cli := &remoteClient{
 		grpcConn:    conn,
 		queryClient: client,
 		wasmClient:  wq,
+		bankClient:  bq,
 		config:      config,
 		codec:       cdc,
 	}
@@ -673,16 +677,22 @@ func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height 
 	if address == "" {
 		return nil, nil
 	}
-	
-	req := &types.QueryBalancesRequest{
+
+	req := &banktypes.QueryAllBalancesRequest{
 		Address: address,
 	}
-	
-	resp, err := c.queryClient.Balances(ctx, req)
+	resp, err := c.bankClient.AllBalances(c.ctxWithHeight(ctx, height), req)
 	if err != nil {
-		return nil, fmt.Errorf("gRPC balances query failed: %w", err)
+		if shouldRetryWithoutHeight(err) {
+			resp, err = c.bankClient.AllBalances(ctx, req)
+		}
 	}
-	
+	if err != nil {
+		return nil, fmt.Errorf("bank gRPC AllBalances failed: %w", err)
+	}
+	if resp == nil {
+		return nil, nil
+	}
 	return c.codec.Marshal(resp)
 }
 
