@@ -45,6 +45,10 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
+	if f.storeKey == "bank" {
+		return false
+	}
+
 	if f.service.IsGenesisMode() {
 		return false
 	}
@@ -52,14 +56,14 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	if f.storeKey == "wasm" {
 		return true
 	}
-	if f.storeKey == "thorchain" || f.storeKey == "bank" || f.storeKey == "auth" {
+	if f.storeKey == "thorchain" || f.storeKey == "auth" {
 		return true
 	}
 
 	if f.sdkCtx != nil {
 		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
 			fmt.Printf("[forking] checking tx\n")
-			if f.storeKey == "acc" || f.storeKey == "auth" || f.storeKey == "bank" {
+			if f.storeKey == "acc" || f.storeKey == "auth" {
 				return true
 			}
 			return false
