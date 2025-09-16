@@ -15,6 +15,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
@@ -54,7 +55,7 @@ func (h WasmExecuteContractHandler) validate(ctx cosmos.Context, msg wasmtypes.M
 
 func (h WasmExecuteContractHandler) handle(ctx cosmos.Context, msg wasmtypes.MsgExecuteContract) (*wasmtypes.MsgExecuteContractResponse, error) {
 	ctx.Logger().Info("receive MsgExecuteContract", "from", msg.Sender)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgExecuteContract while THORChain is halted")
 	}
 

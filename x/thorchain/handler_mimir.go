@@ -11,6 +11,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
@@ -123,6 +124,8 @@ func (h MimirHandler) handleV3_0_0(ctx cosmos.Context, msg MsgMimir) error {
 		ctx.Logger().Error("fail to save node mimir", "error", err)
 		return err
 	}
+	ctx.Logger().Info("set_node_mimir ok", "key", msg.Key, "value", msg.Value)
+
 	nodeMimirEvent := NewEventSetNodeMimir(strings.ToUpper(msg.Key), strconv.FormatInt(msg.Value, 10), msg.Signer.String())
 	if err = h.mgr.EventMgr().EmitEvent(ctx, nodeMimirEvent); err != nil {
 		ctx.Logger().Error("fail to emit set_node_mimir event", "error", err)
@@ -136,6 +139,17 @@ func (h MimirHandler) handleV3_0_0(ctx cosmos.Context, msg MsgMimir) error {
 
 	// If the Mimir key is already the submitted value, don't do anything further.
 	if msg.Value == currentMimirValue {
+		return nil
+	}
+
+	// In forking mode, apply the value directly to mirror mainnet behavior locally.
+	if forking.Enabled {
+		h.mgr.Keeper().SetMimir(ctx, msg.Key, msg.Value)
+		ctx.Logger().Info("set_mimir ok", "key", msg.Key, "effective", msg.Value)
+		mimirEvent := NewEventSetMimir(strings.ToUpper(msg.Key), strconv.FormatInt(msg.Value, 10))
+		if err = h.mgr.EventMgr().EmitEvent(ctx, mimirEvent); err != nil {
+			ctx.Logger().Error("fail to emit set_mimir event", "error", err)
+		}
 		return nil
 	}
 
@@ -177,6 +191,8 @@ func (h MimirHandler) handleV3_0_0(ctx cosmos.Context, msg MsgMimir) error {
 	}
 	// Reaching this point indicates a new mimir value is to be set.
 	h.mgr.Keeper().SetMimir(ctx, msg.Key, effectiveValue)
+	ctx.Logger().Info("set_mimir ok", "key", msg.Key, "effective", effectiveValue)
+
 	mimirEvent := NewEventSetMimir(strings.ToUpper(msg.Key), strconv.FormatInt(effectiveValue, 10))
 	if err = h.mgr.EventMgr().EmitEvent(ctx, mimirEvent); err != nil {
 		ctx.Logger().Error("fail to emit set_mimir event", "error", err)
@@ -186,6 +202,9 @@ func (h MimirHandler) handleV3_0_0(ctx cosmos.Context, msg MsgMimir) error {
 }
 
 func validateMimirAuth(ctx cosmos.Context, k keeper.Keeper, msg MsgMimir) (cosmos.Context, error) {
+	if forking.Enabled {
+		return ctx, nil
+	}
 	return activeNodeAccountsSignerPriority(ctx, k, msg.GetSigners())
 }
 

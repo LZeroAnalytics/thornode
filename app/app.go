@@ -1,12 +1,12 @@
 package app
 
 import (
+	"os"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -163,6 +163,7 @@ type THORChainApp struct {
 	DenomKeeper      denomkeeper.Keeper
 	msgServiceRouter *MsgServiceRouter // router for redirecting Msg service messages
 	WasmKeeper       wasmkeeper.Keeper
+	wasmDir          string
 
 	// forking services
 	forkingServices []forking.ForkingKVStoreService
@@ -178,6 +179,9 @@ type THORChainApp struct {
 	configurator        module.Configurator
 	queryServiceRouter  *QueryServiceRouter
 	once                sync.Once
+	forkGRPC   string
+	forkHeight int64
+
 }
 
 
@@ -389,9 +393,15 @@ func NewChainApp(
 			CacheSize:       cast.ToInt(appOpts.Get("fork.cache-size")),
 			GasCostPerFetch: cast.ToUint64(appOpts.Get("fork.gas-cost-per-fetch")),
 		}
+		forking.Enabled = true
+
 		logger.Info("Forking config", "height", forkingConfig.ForkHeight, "cache_enabled", forkingConfig.CacheEnabled, "cache_size", forkingConfig.CacheSize)
 
+		app.forkGRPC = forkingGRPC
+		app.forkHeight = forkingConfig.ForkHeight
+
 		if forkingConfig.TrustingPeriod == 0 {
+
 			forkingConfig.TrustingPeriod = 24 * time.Hour
 		}
 		if forkingConfig.MaxClockDrift == 0 {
@@ -491,22 +501,20 @@ func NewChainApp(
 		app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper,
 	)
 
-	wasmDir := filepath.Join(homePath, "data") // "wasm" subdirectory created here
+	wasmDir := filepath.Join(homePath, "data")
+	app.wasmDir = wasmDir
 	wasmConfig, err := wasm.ReadWasmConfig(appOpts)
 	if err != nil {
 		panic(fmt.Sprintf("error while reading wasm config: %s", err))
 	}
+	fmt.Fprintf(os.Stderr, "[wasm-open] init wasmDir=%s homePath=%s forking=%v\n", wasmDir, homePath, forkingEnabled)
 
 	wasmOpts = append(wasmOpts,
-		wasmkeeper.WithQueryPlugins(
-			&wasmkeeper.QueryPlugins{
-				Grpc: wasmkeeper.AcceptListGrpcQuerier(
-					wasmAcceptedQueries,
-					app.BaseApp.GRPCQueryRouter(),
-					app.appCodec),
-			},
-		),
 		wasmkeeper.WithGasRegister(WasmGasRegister),
+		wasmkeeper.WithQueryPlugins(&wasmkeeper.QueryPlugins{
+			Stargate: wasmkeeper.AcceptListStargateQuerier(wasmAcceptedQueries, app.GRPCQueryRouter(), app.appCodec),
+			Grpc:     wasmkeeper.AcceptListGrpcQuerier(wasmAcceptedQueries, app.GRPCQueryRouter(), app.appCodec),
+		}),
 	)
 
 	// The last arguments can contain custom message handlers, and custom query handlers,
@@ -534,6 +542,7 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		wasmOpts...,
 	)
+	fmt.Fprintf(os.Stderr, "[wasm-open] keeper constructed with wasmDir=%s\n", wasmDir)
 
 	app.DenomKeeper = denomkeeper.NewKeeper(
 		app.appCodec,
@@ -549,6 +558,8 @@ func NewChainApp(
 
 	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
+	app.msgServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Msg", NewWasmMsgWrapper(app, &app.WasmKeeper, wasmkeeper.NewMsgServerImpl(&app.WasmKeeper)))
+	app.msgServiceRouter.AddCustomRoute("types.Msg", NewThorchainMsgWrapper(app, &app.WasmKeeper, thorchain.NewMsgServerImpl(mgrs)))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
 
@@ -670,9 +681,9 @@ func NewChainApp(
 
 	// Uncomment if you want to set a custom migration order here.
 	// app.ModuleManager.SetOrderMigrations(custom order)
-
 	app.queryServiceRouter = NewQueryServiceRouter(app.BaseApp.GRPCQueryRouter())
 	app.queryServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Query", NewBankQueryWrapper(app.BankKeeper))
+	app.queryServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Query", NewWasmQueryWrapper(app, &app.WasmKeeper, wasmkeeper.NewGrpcQuerier(app.appCodec, wasmStoreService, &app.WasmKeeper, wasmConfig.SmartQueryGasLimit)))
 	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.queryServiceRouter)
 	err = app.ModuleManager.RegisterServices(app.configurator)
 	if err != nil {
@@ -781,7 +792,7 @@ func NewChainApp(
 
 		// Initialize pinned codes in wasmvm as they are not persisted there
 		if err := app.WasmKeeper.InitializePinnedCodes(ctx); err != nil {
-			panic(fmt.Sprintf("failed initialize pinned codes %s", err))
+			app.BaseApp.Logger().Error("failed initialize pinned codes", "err", err)
 		}
 	}
 
@@ -794,10 +805,6 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 	app.once.Do(func() {
 		ctx := app.NewUncachedContext(false, tmproto.Header{})
 		if _, err := app.ConsensusParamsKeeper.Params(ctx, &consensusparamtypes.QueryParamsRequest{}); err != nil {
-			// prevents panic: consensus key is nil: collections: not found: key 'no_key' of type github.com/cosmos/gogoproto/tendermint.types.ConsensusParams
-			// sdk 47:
-			// Migrate Tendermint consensus parameters from x/params module to a dedicated x/consensus module.
-			// see https://github.com/cosmos/cosmos-sdk/blob/v0.47.0/simapp/upgrades.go#L66
 			baseAppLegacySS := app.GetSubspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
 			err = baseapp.MigrateParams(sdk.UnwrapSDKContext(ctx), baseAppLegacySS, app.ConsensusParamsKeeper.ParamsStore)
 			if err != nil {
@@ -805,6 +812,14 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 			}
 		}
 	})
+
+	defer func() {
+		for _, service := range app.forkingServices {
+			if e := service.EndBlock(); e != nil {
+				app.Logger().Error("failed to end block on forking service", "error", e)
+			}
+		}
+	}()
 
 	return app.BaseApp.FinalizeBlock(req)
 }
@@ -826,6 +841,7 @@ func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBl
 
 	return app.ModuleManager.PreBlock(ctx)
 }
+
 
 func (a *THORChainApp) Configurator() module.Configurator {
 	return a.configurator

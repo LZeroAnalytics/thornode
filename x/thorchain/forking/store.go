@@ -45,8 +45,29 @@ func NewForkingKVStore(
 }
 
 func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
+	if f.storeKey == "bank" {
+		return false
+	}
+
 	if f.service.IsGenesisMode() {
 		return false
+	}
+
+	if f.storeKey == "wasm" {
+		return true
+	}
+	if f.storeKey == "thorchain" || f.storeKey == "auth" {
+		return true
+	}
+
+	if f.sdkCtx != nil {
+		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
+			fmt.Printf("[forking] checking tx\n")
+			if f.storeKey == "acc" || f.storeKey == "auth" {
+				return true
+			}
+			return false
+		}
 	}
 
 	if f.remoteClient == nil {
@@ -59,11 +80,6 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 			fmt.Printf("[forking] user API call detected\n")
 			return true
 		}
-
-		if f.sdkCtx.IsCheckTx() || f.sdkCtx.IsReCheckTx() {
-			fmt.Printf("[forking] checking tx\n")
-			return false
-		}
 	}
 
 	if f.service.IsBlockProcessing() {
@@ -74,6 +90,9 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 }
 
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
+	if f.storeKey == "wasm" && len(key) > 0 && key[0] == 0x02 {
+		fmt.Printf("[forking][GET][wasm] ContractInfo key len=%d key=%s\n", len(key), hex.EncodeToString(key))
+	}
 	if v, err := f.parent.Get(key); err == nil && v != nil {
 		return v, nil
 	}
@@ -81,13 +100,17 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	if f.config.CacheEnabled {
 		if cached := f.cache.Get(key); cached != nil {
 			if len(cached) == 0 {
-				fmt.Printf("[forking][GET] negative-cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
+				if f.storeKey == "wasm" {
+				} else {
+					fmt.Printf("[forking][GET] negative-cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
+					f.service.updateStats(false, true, 0, false)
+					return nil, nil
+				}
+			} else {
+				fmt.Printf("[forking][GET] cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
 				f.service.updateStats(false, true, 0, false)
-				return nil, nil
+				return cached, nil
 			}
-			fmt.Printf("[forking][GET] cache-hit store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
-			f.service.updateStats(false, true, 0, false)
-			return cached, nil
 		}
 	}
 
@@ -98,8 +121,10 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	height := f.service.GetPinnedHeight()
 	fmt.Printf("[forking][GET] pinned-height=%d store=%s key=%s\n", height, f.storeKey, hex.EncodeToString(key))
 	if height == 0 {
-		fmt.Printf("[forking][GET] remote-disabled(height=0) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
-		return nil, nil
+		if f.storeKey != "wasm" {
+			fmt.Printf("[forking][GET] remote-disabled(height=0) store=%s key=%s\n", f.storeKey, hex.EncodeToString(key))
+			return nil, nil
+		}
 	}
 
 	fmt.Printf("[forking][GET] remote-fetch store=%s key=%s height=%d\n", f.storeKey, hex.EncodeToString(key), height)
@@ -116,13 +141,18 @@ func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 			f.gasMeter.ConsumeGas(f.config.GasCostPerFetch, "forking_remote_fetch_failed")
 		}
 		f.service.updateStats(true, false, f.config.GasCostPerFetch, true)
-		return nil, err
+		if f.config.CacheEnabled && f.storeKey != "wasm" {
+			f.cache.Set(key, []byte{})
+		}
+		return nil, nil
 	}
 
 	if v == nil {
 		fmt.Printf("[forking][GET] remote-miss store=%s key=%s height=%d duration=%v\n", f.storeKey, hex.EncodeToString(key), height, duration)
 		if f.config.CacheEnabled {
-			f.cache.Set(key, []byte{})
+			if f.storeKey != "wasm" {
+				f.cache.Set(key, []byte{})
+			}
 		}
 	} else {
 		fmt.Printf("[forking][GET] remote-success store=%s key=%s height=%d duration=%v size=%d bytes\n", f.storeKey, hex.EncodeToString(key), height, duration, len(v))
@@ -211,7 +241,7 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 	}
 
 	height := f.service.GetPinnedHeight()
-	if height == 0 || f.remoteClient == nil {
+	if (height == 0 && f.storeKey != "wasm") || f.remoteClient == nil {
 		return &EmptyIterator{}, nil
 	}
 
@@ -226,6 +256,9 @@ func (f *forkingKVStore) fetchRemoteRange(start, end []byte, reverse bool) (stor
 
 	if err != nil {
 		fmt.Printf("[forking][RANGE] remote-error store=%s start=%s end=%s height=%d duration=%v err=%v\n", f.storeKey, hex.EncodeToString(start), hex.EncodeToString(end), height, duration, err)
+		if f.storeKey == "wasm" {
+			return &EmptyIterator{}, nil
+		}
 		return &EmptyIterator{}, err
 	}
 

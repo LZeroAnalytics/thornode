@@ -10,6 +10,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
@@ -63,7 +64,7 @@ func (h DepositHandler) validateV3_0_0(ctx cosmos.Context, msg MsgDeposit) error
 }
 
 func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Result, error) {
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgDeposit while THORChain is halted")
 	}
 
