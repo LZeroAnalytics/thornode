@@ -1,5 +1,6 @@
 package forking
 
+	"os"
 import (
 	"context"
 	"encoding/hex"
@@ -89,6 +90,9 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 	return true
 }
 
+	if os.Getenv("THOR_FORK_DEBUG") == "1" && (f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc") {
+		fmt.Printf("[rpc-debug][GET] store=%s key=%s allowRemote=%v\n", f.storeKey, hex.EncodeToString(key), f.shouldAllowRemoteFetch())
+	}
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
 	if f.storeKey == "wasm" && len(key) > 0 && key[0] == 0x02 {
 		fmt.Printf("[forking][GET][wasm] ContractInfo key len=%d key=%s\n", len(key), hex.EncodeToString(key))
@@ -189,6 +193,10 @@ func (f *forkingKVStore) Delete(key []byte) error {
 	return nil
 }
 
+	if os.Getenv("THOR_FORK_DEBUG") == "1" && (f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc") {
+		s, e := start, end
+		fmt.Printf("[rpc-debug][ITER] store=%s start=%s end=%s allowRemote=%v\n", f.storeKey, hex.EncodeToString(s), hex.EncodeToString(e), f.shouldAllowRemoteFetch())
+	}
 func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error) {
 	localIter, err := f.parent.Iterator(start, end)
 	if err != nil {
@@ -207,6 +215,10 @@ func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error
 	return NewMergedIterator(localIter, remoteIter), nil
 }
 
+	if os.Getenv("THOR_FORK_DEBUG") == "1" && (f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc") {
+		s, e := start, end
+		fmt.Printf("[rpc-debug][RITER] store=%s start=%s end=%s allowRemote=%v\n", f.storeKey, hex.EncodeToString(s), hex.EncodeToString(e), f.shouldAllowRemoteFetch())
+	}
 func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator, error) {
 	localIter, err := f.parent.ReverseIterator(start, end)
 	if err != nil {
