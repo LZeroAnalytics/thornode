@@ -93,6 +93,7 @@ import (
 	denomtypes "gitlab.com/thorchain/thornode/v3/x/denom/types"
 
 	evm "github.com/cosmos/evm/encoding/codec"
+
 	"github.com/cosmos/evm/ethereum/eip712"
 )
 
@@ -1013,7 +1014,7 @@ func RegisterSwaggerAPI(rtr *mux.Router, swaggerEnabled bool) error {
 
 // RegisterTxService implements the Application.RegisterTxService method.
 func (app *THORChainApp) RegisterTxService(clientCtx client.Context) {
-	authtx.RegisterTxService(app.BaseApp.GRPCQueryRouter(), clientCtx, app.BaseApp.Simulate, app.interfaceRegistry)
+	authtx.RegisterTxService(app.GRPCQueryRouter(), clientCtx, app.BaseApp.Simulate, app.interfaceRegistry)
 }
 
 // RegisterTendermintService implements the Application.RegisterTendermintService method.
@@ -1021,7 +1022,7 @@ func (app *THORChainApp) RegisterTendermintService(clientCtx client.Context) {
 	cmtApp := server.NewCometABCIWrapper(app)
 	cmtservice.RegisterTendermintService(
 		clientCtx,
-		app.BaseApp.GRPCQueryRouter(),
+		app.GRPCQueryRouter(),
 		app.interfaceRegistry,
 		cmtApp.Query,
 	)
@@ -1065,6 +1066,10 @@ func BlockedAddresses() map[string]bool {
 	delete(modAccAddrs, authtypes.NewModuleAddress(thorchaintypes.TreasuryName).String())
 
 	return modAccAddrs
+}
+
+func (app *THORChainApp) GRPCQueryRouter() *QueryServiceRouter {
+	return app.queryServiceRouter
 }
 
 // MsgServiceRouter returns the MsgServiceRouter.
