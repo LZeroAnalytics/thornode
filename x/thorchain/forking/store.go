@@ -205,7 +205,7 @@ func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error
 		return nil, err
 	}
 
-	if !f.shouldAllowRemoteFetch() {
+	if f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc" || !f.shouldAllowRemoteFetch() {
 		return localIter, nil
 	}
 
@@ -227,7 +227,7 @@ func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator
 		return nil, err
 	}
 
-	if !f.shouldAllowRemoteFetch() {
+	if f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc" || !f.shouldAllowRemoteFetch() {
 		return localIter, nil
 	}
 

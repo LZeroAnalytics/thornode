@@ -690,6 +690,8 @@ func NewChainApp(
 	if err != nil {
 		panic(err)
 	}
+	app.BaseApp.SetGRPCQueryRouter(app.GRPCQueryRouter())
+
 
 	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
 	// Make sure it's called after `app.ModuleManager` and `app.configurator` are set.
