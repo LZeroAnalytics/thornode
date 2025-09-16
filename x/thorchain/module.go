@@ -23,7 +23,6 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/metadata"
-	"time"
 
 	"gitlab.com/thorchain/thornode/v3/app/params"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
@@ -298,9 +297,6 @@ func CustomGRPCGatewayRouter(apiSvr *api.Server) {
 		// Cosmos sdk expect the GRPCBlockHeightHeader to be set if the latest height is not used.
 		// This function will extract the height query param and set it in the metadata for the sdk to consume.
 		runtime.WithMetadata(func(ctx context.Context, req *http.Request) metadata.MD {
-			if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-				ctx, _ = context.WithTimeout(ctx, 10*time.Second)
-			}
 			md := make(metadata.MD, 2)
 			md.Set("user-api-call", "true")
 			for key := range req.Header {
