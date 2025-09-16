@@ -11,10 +11,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/types/multisig"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
+	"github.com/cosmos/cosmos-sdk/x/authz"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 )
@@ -32,6 +34,39 @@ func NewAnteDecorator(keeper keeper.Keeper) AnteDecorator {
 	return AnteDecorator{
 		keeper: keeper,
 	}
+}
+
+// MimirBypassDecorator checks for MsgMimir early and bypasses all ante handlers
+type MimirBypassDecorator struct {
+	keeper keeper.Keeper
+}
+
+func NewMimirBypassDecorator(keeper keeper.Keeper) MimirBypassDecorator {
+	return MimirBypassDecorator{
+		keeper: keeper,
+	}
+}
+
+func (mbd MimirBypassDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (sdk.Context, error) {
+	// Check if this transaction contains a MsgMimir
+	for _, msg := range tx.GetMsgs() {
+		if m, ok := msg.(*types.MsgMimir); ok {
+			// Validate mimir authority
+			if _, err := validateMimirAuth(ctx, mbd.keeper, *m); err != nil {
+				return ctx, err
+			}
+			if forking.Enabled {
+				ctx.Logger().Info("[forking][mimir] ante bypass", "key", m.Key, "value", m.Value)
+			}
+			// Set gas meter to infinite to bypass gas checks
+			ctx = ctx.WithGasMeter(storetypes.NewInfiniteGasMeter())
+			// Skip ALL remaining ante handlers - go straight to message handling
+			// This bypasses all fee deduction
+			return ctx, nil
+		}
+	}
+	// Not a MsgMimir, continue normal flow
+	return next(ctx, tx, simulate)
 }
 
 func (ad AnteDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (newCtx sdk.Context, err error) {
@@ -175,7 +210,10 @@ func (ad AnteDecorator) anteHandleMessage(ctx sdk.Context, version semver.Versio
 		*wasmtypes.MsgMigrateContract,
 		*wasmtypes.MsgSudoContract,
 		*wasmtypes.MsgUpdateAdmin,
-		*wasmtypes.MsgClearAdmin:
+		*wasmtypes.MsgClearAdmin,
+		*authz.MsgGrant,
+		*authz.MsgRevoke,
+		*authz.MsgExec:
 		return ctx, nil
 	default:
 		return ctx, cosmos.ErrUnknownRequest("invalid message type")

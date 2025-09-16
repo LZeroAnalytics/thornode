@@ -19,6 +19,7 @@ import (
 	openapi "gitlab.com/thorchain/thornode/v3/openapi/gen"
 
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 func GetTxCmd() *cobra.Command {
@@ -28,6 +29,8 @@ func GetTxCmd() *cobra.Command {
 		SuggestionsMinimumDistance: 2,
 		RunE:                       client.ValidateCmd,
 	}
+
+	forking.AddModuleInitFlags(cmd)
 
 	cmd.AddCommand(GetCmdSetNodeKeys())
 	cmd.AddCommand(GetCmdSetVersion())

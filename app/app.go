@@ -1,15 +1,16 @@
 package app
 
 import (
+	"os"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -17,6 +18,7 @@ import (
 	reflectionv1 "cosmossdk.io/api/cosmos/reflection/v1"
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/core/appmodule"
+	corestore "cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	"cosmossdk.io/x/upgrade"
@@ -51,6 +53,9 @@ import (
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	txmodule "github.com/cosmos/cosmos-sdk/x/auth/tx/config"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	authz "github.com/cosmos/cosmos-sdk/x/authz"
+	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
+	authzmodule "github.com/cosmos/cosmos-sdk/x/authz/module"	
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -77,6 +82,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/openapi"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	thorchainkeeper "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	thorchainkeeperabci "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/abci"
 	thorchainkeeperv1 "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/v1"
@@ -142,6 +148,7 @@ type THORChainApp struct {
 
 	// keepers
 	AccountKeeper authkeeper.AccountKeeper
+	AuthzKeeper   authzkeeper.Keeper
 	BankKeeper    bankkeeper.BaseKeeper
 	StakingKeeper *stakingkeeper.Keeper
 	MintKeeper    mintkeeper.Keeper
@@ -156,6 +163,10 @@ type THORChainApp struct {
 	DenomKeeper      denomkeeper.Keeper
 	msgServiceRouter *MsgServiceRouter // router for redirecting Msg service messages
 	WasmKeeper       wasmkeeper.Keeper
+	wasmDir          string
+
+	// forking services
+	forkingServices []forking.ForkingKVStoreService
 
 	// the module manager
 	ModuleManager      *module.Manager
@@ -165,9 +176,14 @@ type THORChainApp struct {
 	sm *module.SimulationManager
 
 	// module configurator
-	configurator module.Configurator
-	once         sync.Once
+	configurator        module.Configurator
+	queryServiceRouter  *QueryServiceRouter
+	once                sync.Once
+	forkGRPC   string
+	forkHeight int64
+
 }
+
 
 // NewChainApp returns a reference to an initialized ChainApp.
 func NewChainApp(
@@ -224,6 +240,7 @@ func NewChainApp(
 	// }
 	// baseAppOptions = append(baseAppOptions, voteExtOp)
 
+
 	bApp := baseapp.NewBaseApp(appName, logger, db, ec.TxConfig.TxDecoder(), baseAppOptions...)
 	bApp.SetCommitMultiStoreTracer(traceStore)
 	bApp.SetVersion(version.Version)
@@ -231,7 +248,9 @@ func NewChainApp(
 	bApp.SetTxEncoder(ec.TxConfig.TxEncoder())
 
 	keys := storetypes.NewKVStoreKeys(
-		authtypes.StoreKey, banktypes.StoreKey,
+		authtypes.StoreKey,
+		banktypes.StoreKey,
+		authzkeeper.StoreKey,
 		stakingtypes.StoreKey,
 		minttypes.StoreKey,
 		paramstypes.StoreKey,
@@ -289,6 +308,12 @@ func NewChainApp(
 		sdk.GetConfig().GetBech32AccountAddrPrefix(),
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 	)
+	app.AuthzKeeper = authzkeeper.NewKeeper(
+		runtime.NewKVStoreService(keys[authzkeeper.StoreKey]),
+		app.appCodec,
+		app.MsgServiceRouter(),
+		app.AccountKeeper,
+	)	
 	app.BankKeeper = bankkeeper.NewBaseKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(keys[banktypes.StoreKey]),
@@ -344,33 +369,167 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 	)
 
+	var thorchainStoreService corestore.KVStoreService
+	forkingGRPC := cast.ToString(appOpts.Get("fork.grpc"))
+	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
+	forkingEnabled := forkingGRPC != "" && forkingChainID != ""
+
+	var forkingConfig forking.RemoteConfig
+	var remoteClient forking.RemoteClient
+	var wasmForkingService forking.ForkingKVStoreService
+
+	if forkingEnabled {
+		logger.Info("Forking enabled", "grpc", forkingGRPC, "chain_id", forkingChainID)
+		forkingConfig = forking.RemoteConfig{
+			GRPC:            forkingGRPC,
+			ChainID:         forkingChainID,
+			ForkHeight:      cast.ToInt64(appOpts.Get("fork.height")),
+			TrustHeight:     cast.ToInt64(appOpts.Get("fork.trust-height")),
+			TrustHash:       cast.ToString(appOpts.Get("fork.trust-hash")),
+			TrustingPeriod:  cast.ToDuration(appOpts.Get("fork.trusting-period")),
+			MaxClockDrift:   cast.ToDuration(appOpts.Get("fork.max-clock-drift")),
+			Timeout:         cast.ToDuration(appOpts.Get("fork.timeout")),
+			CacheEnabled:    cast.ToBool(appOpts.Get("fork.cache-enabled")),
+			CacheSize:       cast.ToInt(appOpts.Get("fork.cache-size")),
+			GasCostPerFetch: cast.ToUint64(appOpts.Get("fork.gas-cost-per-fetch")),
+		}
+		forking.Enabled = true
+
+		logger.Info("Forking config", "height", forkingConfig.ForkHeight, "cache_enabled", forkingConfig.CacheEnabled, "cache_size", forkingConfig.CacheSize)
+
+		app.forkGRPC = forkingGRPC
+		app.forkHeight = forkingConfig.ForkHeight
+
+		if forkingConfig.TrustingPeriod == 0 {
+
+			forkingConfig.TrustingPeriod = 24 * time.Hour
+		}
+		if forkingConfig.MaxClockDrift == 0 {
+			forkingConfig.MaxClockDrift = 10 * time.Second
+		}
+		if forkingConfig.Timeout == 0 {
+			forkingConfig.Timeout = 30 * time.Second
+		}
+		if forkingConfig.CacheSize == 0 {
+			forkingConfig.CacheSize = 10000
+		}
+
+		forkingConfig.GasCostPerFetch = 0
+
+		var err error
+		logger.Info("Creating forking remote client...")
+		remoteClient, err = forking.NewRemoteClient(forkingConfig, app.appCodec)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create forking remote client: %s", err))
+		}
+		logger.Info("Forking remote client created successfully")
+
+		cache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute) // 5 minute TTL
+		if err != nil {
+			panic(fmt.Sprintf("failed to create forking cache: %s", err))
+		}
+
+		thorchainForkingService := forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]),
+			remoteClient,
+			cache,
+			forkingConfig,
+			thorchaintypes.StoreKey,
+		)
+		thorchainStoreService = thorchainForkingService
+
+		bankCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create bank forking cache: %s", err))
+		}
+		authCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create auth forking cache: %s", err))
+		}
+
+		bankForkingService := forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[banktypes.StoreKey]),
+			remoteClient, bankCache, forkingConfig, banktypes.StoreKey,
+		)
+		bankStoreService := bankForkingService
+		authForkingService := forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[authtypes.StoreKey]),
+			remoteClient, authCache, forkingConfig, authtypes.StoreKey,
+		)
+		authStoreService := authForkingService
+
+		wasmCache, err := forking.NewLRUCache(forkingConfig.CacheSize, 5*time.Minute)
+		if err != nil {
+			panic(fmt.Sprintf("failed to create wasm forking cache: %s", err))
+		}
+
+		wasmForkingService = forking.NewForkingKVStoreService(
+			runtime.NewKVStoreService(keys[wasmtypes.StoreKey]),
+			remoteClient, wasmCache, forkingConfig, wasmtypes.StoreKey,
+		)
+
+		app.forkingServices = []forking.ForkingKVStoreService{
+			thorchainForkingService,
+			bankForkingService,
+			authForkingService,
+			wasmForkingService,
+		}
+		logger.Info("Forking services initialized", "count", len(app.forkingServices))
+
+		app.AccountKeeper = authkeeper.NewAccountKeeper(
+			app.appCodec,
+			authStoreService,
+			authtypes.ProtoBaseAccount,
+			maccPerms,
+			authcodec.NewBech32Codec(sdk.GetConfig().GetBech32AccountAddrPrefix()),
+			sdk.GetConfig().GetBech32AccountAddrPrefix(),
+			authtypes.NewModuleAddress(thorchain.ModuleName).String(),
+		)
+		app.BankKeeper = bankkeeper.NewBaseKeeper(
+			app.appCodec,
+			bankStoreService,
+			app.AccountKeeper,
+			BlockedAddresses(),
+			authtypes.NewModuleAddress(thorchain.ModuleName).String(),
+			logger,
+		)
+	} else {
+		thorchainStoreService = runtime.NewKVStoreService(keys[thorchaintypes.StoreKey])
+	}
+
 	app.ThorchainKeeper = thorchainkeeperv1.NewKeeper(
-		app.appCodec, runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]), app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper,
+		app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper,
 	)
 
-	wasmDir := filepath.Join(homePath, "data") // "wasm" subdirectory created here
+	wasmDir := filepath.Join(homePath, "data")
+	app.wasmDir = wasmDir
 	wasmConfig, err := wasm.ReadWasmConfig(appOpts)
 	if err != nil {
 		panic(fmt.Sprintf("error while reading wasm config: %s", err))
 	}
+	fmt.Fprintf(os.Stderr, "[wasm-open] init wasmDir=%s homePath=%s forking=%v\n", wasmDir, homePath, forkingEnabled)
 
 	wasmOpts = append(wasmOpts,
-		wasmkeeper.WithQueryPlugins(
-			&wasmkeeper.QueryPlugins{
-				Grpc: wasmkeeper.AcceptListGrpcQuerier(
-					wasmAcceptedQueries,
-					app.BaseApp.GRPCQueryRouter(),
-					app.appCodec),
-			},
-		),
 		wasmkeeper.WithGasRegister(WasmGasRegister),
+		wasmkeeper.WithQueryPlugins(&wasmkeeper.QueryPlugins{
+			Stargate: wasmkeeper.AcceptListStargateQuerier(wasmAcceptedQueries, app.GRPCQueryRouter(), app.appCodec),
+			Grpc:     wasmkeeper.AcceptListGrpcQuerier(wasmAcceptedQueries, app.GRPCQueryRouter(), app.appCodec),
+		}),
 	)
 
 	// The last arguments can contain custom message handlers, and custom query handlers,
 	// if we want to allow any custom callbacks
+	var wasmStoreService corestore.KVStoreService
+
+	if forkingEnabled {
+		wasmStoreService = wasmForkingService
+	} else {
+		wasmStoreService = runtime.NewKVStoreService(keys[wasmtypes.StoreKey])
+	}
+
 	app.WasmKeeper = wasmkeeper.NewKeeper(
 		app.appCodec,
-		runtime.NewKVStoreService(keys[wasmtypes.StoreKey]),
+		wasmStoreService,
 		app.AccountKeeper,
 		NewWasmBankKeeper(app.BankKeeper),
 		app.StakingKeeper,
@@ -383,6 +542,7 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		wasmOpts...,
 	)
+	fmt.Fprintf(os.Stderr, "[wasm-open] keeper constructed with wasmDir=%s\n", wasmDir)
 
 	app.DenomKeeper = denomkeeper.NewKeeper(
 		app.appCodec,
@@ -396,8 +556,10 @@ func NewChainApp(
 	telemetryEnabled := cast.ToBool(appOpts.Get("telemetry.enabled"))
 	testApp := cast.ToBool(appOpts.Get(TestApp))
 
-	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, runtime.NewKVStoreService(keys[thorchaintypes.StoreKey]), app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
+	mgrs := thorchain.NewManagers(app.ThorchainKeeper, app.appCodec, thorchainStoreService, app.BankKeeper, app.AccountKeeper, app.UpgradeKeeper, app.WasmKeeper)
 	app.msgServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Msg", thorchain.NewBankSendHandler(thorchain.NewSendHandler(mgrs)))
+	app.msgServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Msg", NewWasmMsgWrapper(app, &app.WasmKeeper, wasmkeeper.NewMsgServerImpl(&app.WasmKeeper)))
+	app.msgServiceRouter.AddCustomRoute("types.Msg", NewThorchainMsgWrapper(app, &app.WasmKeeper, thorchain.NewMsgServerImpl(mgrs)))
 
 	thorchainModule := thorchain.NewAppModule(mgrs, telemetryEnabled, testApp)
 
@@ -417,6 +579,7 @@ func NewChainApp(
 	// NOTE: Any module instantiated in the module manager that is later modified
 	// must be passed by reference here.
 	authModule := auth.NewAppModule(app.appCodec, app.AccountKeeper, authsims.RandomGenesisAccounts, app.GetSubspace(authtypes.ModuleName))
+	authzModule := authzmodule.NewAppModule(app.appCodec, app.AuthzKeeper, app.AccountKeeper, app.BankKeeper, app.InterfaceRegistry())
 	bankModule := bank.NewAppModule(app.appCodec, app.BankKeeper, app.AccountKeeper, app.GetSubspace(banktypes.ModuleName))
 	consensusModule := consensus.NewAppModule(app.appCodec, app.ConsensusParamsKeeper)
 	genutilModule := genutil.NewAppModule(app.AccountKeeper, app.StakingKeeper, app, txConfig)
@@ -438,6 +601,7 @@ func NewChainApp(
 	app.ModuleManager = module.NewManager(
 		genutilModule,
 		authModule,
+		authzModule,
 		bankModule,
 		upgradeModule,
 		paramsModule,
@@ -455,6 +619,7 @@ func NewChainApp(
 	app.BasicModuleManager = module.NewBasicManager(
 		genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
 		authModule,
+		authzModule,
 		bankModule,
 		upgradeModule,
 		paramsModule,
@@ -476,6 +641,7 @@ func NewChainApp(
 	// NOTE: staking module is required if HistoricalEntries param > 0
 	app.ModuleManager.SetOrderBeginBlockers(
 		genutiltypes.ModuleName,
+		authz.ModuleName,
 		// additional non simd modules
 		thorchaintypes.ModuleName,
 		wasmtypes.ModuleName,
@@ -483,6 +649,7 @@ func NewChainApp(
 
 	app.ModuleManager.SetOrderEndBlockers(
 		genutiltypes.ModuleName,
+		authz.ModuleName,
 		// additional non simd modules
 		thorchaintypes.ModuleName,
 		wasmtypes.ModuleName,
@@ -499,6 +666,7 @@ func NewChainApp(
 	genesisModuleOrder := []string{
 		// simd modules
 		authtypes.ModuleName,
+		authz.ModuleName,
 		banktypes.ModuleName,
 		genutiltypes.ModuleName,
 		paramstypes.ModuleName,
@@ -513,8 +681,10 @@ func NewChainApp(
 
 	// Uncomment if you want to set a custom migration order here.
 	// app.ModuleManager.SetOrderMigrations(custom order)
-
-	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.GRPCQueryRouter())
+	app.queryServiceRouter = NewQueryServiceRouter(app.BaseApp.GRPCQueryRouter())
+	app.queryServiceRouter.AddCustomRoute("cosmos.bank.v1beta1.Query", NewBankQueryWrapper(app.BankKeeper))
+	app.queryServiceRouter.AddCustomRoute("cosmwasm.wasm.v1.Query", NewWasmQueryWrapper(app, &app.WasmKeeper, wasmkeeper.NewGrpcQuerier(app.appCodec, wasmStoreService, &app.WasmKeeper, wasmConfig.SmartQueryGasLimit)))
+	app.configurator = module.NewConfigurator(app.appCodec, app.msgServiceRouter, app.queryServiceRouter)
 	err = app.ModuleManager.RegisterServices(app.configurator)
 	if err != nil {
 		panic(err)
@@ -622,7 +792,7 @@ func NewChainApp(
 
 		// Initialize pinned codes in wasmvm as they are not persisted there
 		if err := app.WasmKeeper.InitializePinnedCodes(ctx); err != nil {
-			panic(fmt.Sprintf("failed initialize pinned codes %s", err))
+			app.BaseApp.Logger().Error("failed initialize pinned codes", "err", err)
 		}
 	}
 
@@ -635,10 +805,6 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 	app.once.Do(func() {
 		ctx := app.NewUncachedContext(false, tmproto.Header{})
 		if _, err := app.ConsensusParamsKeeper.Params(ctx, &consensusparamtypes.QueryParamsRequest{}); err != nil {
-			// prevents panic: consensus key is nil: collections: not found: key 'no_key' of type github.com/cosmos/gogoproto/tendermint.types.ConsensusParams
-			// sdk 47:
-			// Migrate Tendermint consensus parameters from x/params module to a dedicated x/consensus module.
-			// see https://github.com/cosmos/cosmos-sdk/blob/v0.47.0/simapp/upgrades.go#L66
 			baseAppLegacySS := app.GetSubspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
 			err = baseapp.MigrateParams(sdk.UnwrapSDKContext(ctx), baseAppLegacySS, app.ConsensusParamsKeeper.ParamsStore)
 			if err != nil {
@@ -646,6 +812,14 @@ func (app *THORChainApp) FinalizeBlock(req *abci.RequestFinalizeBlock) (*abci.Re
 			}
 		}
 	})
+
+	defer func() {
+		for _, service := range app.forkingServices {
+			if e := service.EndBlock(); e != nil {
+				app.Logger().Error("failed to end block on forking service", "error", e)
+			}
+		}
+	}()
 
 	return app.BaseApp.FinalizeBlock(req)
 }
@@ -659,8 +833,15 @@ func (app *THORChainApp) Name() string { return app.BaseApp.Name() }
 
 // PreBlocker application updates every pre block
 func (app *THORChainApp) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {
+	for _, service := range app.forkingServices {
+		if err := service.BeginBlock(ctx.BlockHeight()); err != nil {
+			ctx.Logger().Error("failed to begin block on forking service", "error", err)
+		}
+	}
+
 	return app.ModuleManager.PreBlock(ctx)
 }
+
 
 func (a *THORChainApp) Configurator() module.Configurator {
 	return a.configurator

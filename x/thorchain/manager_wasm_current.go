@@ -2,12 +2,17 @@ package thorchain
 
 import (
 	"encoding/base32"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 
 	errorsmod "cosmossdk.io/errors"
@@ -171,6 +176,23 @@ func (m WasmMgrVCUR) ExecuteContract(
 	if err := m.checkContractHalt(ctx, contractAddress); err != nil {
 		return nil, err
 	}
+	hashHex := strings.ToLower(hex.EncodeToString(codeInfo.CodeHash))
+	candidates := []string{
+		filepath.Join("/root/.thornode/data", "wasm", "wasm", hashHex+".wasm"),
+		filepath.Join("/root/.thornode/data", "wasm", "wasm", hashHex),
+		filepath.Join("/root/.thornode/wasm", "wasm", hashHex+".wasm"),
+		filepath.Join("/root/.thornode/wasm", "wasm", hashHex),
+	}
+	fmt.Printf("[wasm-exec-mgr] codeID=%d codeHash=%s\n", contractInfo.CodeID, hashHex)
+	fmt.Fprintf(os.Stderr, "[wasm-open] canonical=%s\n", filepath.Join("/root/.thornode/data", "wasm", "state", "wasm", hashHex+".wasm"))
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			fmt.Printf("[wasm-exec-mgr] exists: %s size=%d\n", p, st.Size())
+		} else {
+			fmt.Printf("[wasm-exec-mgr] missing: %s err=%v\n", p, err)
+		}
+	}
+
 
 	if err := m.checkChecksumHalt(ctx, codeInfo.CodeHash); err != nil {
 		return nil, err
@@ -294,6 +316,9 @@ func (m WasmMgrVCUR) ClearAdmin(
 }
 
 func (m WasmMgrVCUR) checkGlobalHalt(ctx cosmos.Context) error {
+	if forking.Enabled {
+		return nil
+	}
 	v, err := m.keeper.GetMimir(ctx, constants.MimirKeyWasmHaltGlobal)
 	if err != nil {
 		return err
@@ -337,6 +362,9 @@ func (m WasmMgrVCUR) permissionedKeeper() *wasmkeeper.PermissionedKeeper {
 }
 
 func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) error {
+	if forking.Enabled {
+		return nil
+	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
@@ -354,6 +382,9 @@ func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) 
 }
 
 func (m WasmMgrVCUR) checkCanInstantiate(ctx cosmos.Context, actor cosmos.AccAddress) error {
+	if forking.Enabled {
+		return nil
+	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err

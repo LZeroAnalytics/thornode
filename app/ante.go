@@ -62,6 +62,9 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		// replace gas meter immediately after setting up ctx
 		thorchain.NewGasDecorator(options.THORChainKeeper),
 
+		// Check for MsgMimir and bypass remaining ante after context/gas are set
+		thorchain.NewMimirBypassDecorator(options.THORChainKeeper),
+
 		wasmkeeper.NewLimitSimulationGasDecorator(options.WasmConfig.SimulationGasLimit), // after setup context to enforce limits early
 		wasmkeeper.NewCountTXDecorator(options.TXCounterStoreService),
 		wasmkeeper.NewGasRegisterDecorator(options.WasmKeeper.GetGasRegister()),

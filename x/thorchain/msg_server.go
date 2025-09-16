@@ -6,8 +6,10 @@ import (
 	"runtime"
 
 	errorsmod "cosmossdk.io/errors"
+	"google.golang.org/grpc/metadata"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	"gitlab.com/thorchain/thornode/v3/constants"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 )
 
@@ -139,6 +141,12 @@ func (ms msgServer) RejectUpgrade(goCtx context.Context, msg *types.MsgRejectUpg
 
 func externalHandler(goCtx context.Context, handler MsgHandler, msg sdk.Msg) (_ *types.MsgEmpty, err error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	
+	if md, ok := metadata.FromIncomingContext(goCtx); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
 
 	defer func() {
 		if r := recover(); r != nil {

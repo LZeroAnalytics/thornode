@@ -11,9 +11,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth/ante"
 	authante "github.com/cosmos/cosmos-sdk/x/auth/ante"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/cosmos/cosmos-sdk/x/authz"
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
 	"gitlab.com/thorchain/thornode/v3/constants"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
 
@@ -53,7 +55,7 @@ func (h WasmExecuteContractHandler) validate(ctx cosmos.Context, msg wasmtypes.M
 
 func (h WasmExecuteContractHandler) handle(ctx cosmos.Context, msg wasmtypes.MsgExecuteContract) (*wasmtypes.MsgExecuteContractResponse, error) {
 	ctx.Logger().Info("receive MsgExecuteContract", "from", msg.Sender)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgExecuteContract while THORChain is halted")
 	}
 
@@ -110,7 +112,10 @@ func (ad WasmExecuteAnteDecorator) AnteHandle(
 			*wasmtypes.MsgInstantiateContract2,
 			*wasmtypes.MsgExecuteContract,
 			*wasmtypes.MsgMigrateContract,
-			*wasmtypes.MsgSudoContract:
+			*wasmtypes.MsgSudoContract,
+			*authz.MsgGrant,
+			*authz.MsgRevoke,
+			*authz.MsgExec:
 			tfc := newTxFeeChcker(ad.keeper)
 			handler := ante.NewDeductFeeDecorator(ad.ak, ad.bk, nil, tfc)
 			return handler.AnteHandle(ctx, tx, simulate, next)

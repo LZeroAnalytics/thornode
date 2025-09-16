@@ -53,6 +53,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/client/cli"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 
 	"github.com/CosmWasm/wasmd/x/wasm"
 	wasmcli "github.com/CosmWasm/wasmd/x/wasm/client/cli"
@@ -138,6 +139,28 @@ func initRootCmd(
 	server.AddCommands(rootCmd, app.DefaultNodeHome, newApp, appExport, addModuleInitFlags)
 	wasmcli.ExtendUnsafeResetAllCmd(rootCmd)
 
+	forking.AddModuleInitFlags(rootCmd)
+
+	// Bind flags for any command so appOpts see them during app construction in CLI paths
+	if rootCmd.PersistentPreRunE == nil {
+		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+			serverCtx := server.GetServerContextFromCmd(cmd)
+			if serverCtx != nil {
+				if err := serverCtx.Viper.BindPFlags(cmd.Flags()); err != nil {
+					return fmt.Errorf("fail to bind flags: %w", err)
+				}
+				if err := serverCtx.Viper.BindPFlags(cmd.PersistentFlags()); err != nil {
+					return fmt.Errorf("fail to bind persistent flags: %w", err)
+				}
+				if err := serverCtx.Viper.BindPFlags(cmd.InheritedFlags()); err != nil {
+					return fmt.Errorf("fail to bind inherited flags: %w", err)
+				}
+				return server.SetCmdServerContext(cmd, serverCtx)
+			}
+			return nil
+		}
+	}
+
 	// add keybase, auxiliary RPC, query, genesis, and tx child commands
 	rootCmd.AddCommand(
 		server.StatusCommand(),
@@ -172,6 +195,7 @@ func addModuleInitFlags(startCmd *cobra.Command) {
 	}
 	wasm.AddModuleInitFlags(startCmd)
 	ebifrost.AddModuleInitFlags(startCmd)
+	forking.AddModuleInitFlags(startCmd)
 }
 
 func renderConfigCommand() *cobra.Command {
@@ -231,6 +255,8 @@ func queryCommand() *cobra.Command {
 		RunE:                       client.ValidateCmd,
 	}
 
+	forking.AddModuleInitFlags(cmd)
+
 	cmd.AddCommand(
 		rpc.QueryEventForTxCmd(),
 		server.QueryBlockCmd(),
@@ -252,6 +278,8 @@ func txCommand() *cobra.Command {
 		SuggestionsMinimumDistance: 2,
 		RunE:                       client.ValidateCmd,
 	}
+
+	forking.AddModuleInitFlags(cmd)
 
 	cmd.AddCommand(
 		authcmd.GetSignCommand(),
@@ -419,6 +447,7 @@ func DefaultBaseappOptions(appOpts types.AppOptions) []func(*baseapp.BaseApp) {
 		// baseapp.SetQueryGasLimit(cast.ToUint64(appOpts.Get(server.FlagQueryGasLimit))),
 	}
 }
+
 
 var tempDir = func() string {
 	dir, err := os.MkdirTemp("", "simd")

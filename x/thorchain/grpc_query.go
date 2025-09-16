@@ -6,9 +6,11 @@ import (
 	"strconv"
 
 	"github.com/cosmos/cosmos-sdk/client"
+	"google.golang.org/grpc/metadata"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/constants"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
 )
 
@@ -27,11 +29,19 @@ func NewQueryServerImpl(mgr *Mgrs, txConfig client.TxConfig, kbs cosmos.KeybaseS
 
 func (s *queryServer) unwrapSdkContext(c context.Context) sdk.Context {
 	ctx := sdk.UnwrapSDKContext(c)
+	
+	if md, ok := metadata.FromIncomingContext(c); ok {
+		if userFlag := md.Get("user-api-call"); len(userFlag) > 0 && userFlag[0] == "true" {
+			ctx = ctx.WithContext(context.WithValue(ctx.Context(), constants.CtxUserAPICall, true))
+		}
+	}
+	
 	if s.regInit {
 		return ctx
 	}
 	initManager(ctx, s.mgr) // NOOP except regtest
 	s.regInit = true
+	
 	return ctx
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
 )
 
 // WasmStoreCodeHandler processes incoming MsgStoreCode messages from x/wasm
@@ -46,7 +47,7 @@ func (h WasmStoreCodeHandler) validate(ctx cosmos.Context, msg wasmtypes.MsgStor
 
 func (h WasmStoreCodeHandler) handle(ctx cosmos.Context, msg wasmtypes.MsgStoreCode) (*wasmtypes.MsgStoreCodeResponse, error) {
 	ctx.Logger().Info("receive MsgStoreCode", "from", msg.Sender)
-	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
+	if !forking.Enabled && h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgStoreCode while THORChain is halted")
 	}
 
