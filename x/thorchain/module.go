@@ -23,6 +23,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/metadata"
+	"time"
 
 	"gitlab.com/thorchain/thornode/v3/app/params"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
@@ -297,26 +298,24 @@ func CustomGRPCGatewayRouter(apiSvr *api.Server) {
 		// Cosmos sdk expect the GRPCBlockHeightHeader to be set if the latest height is not used.
 		// This function will extract the height query param and set it in the metadata for the sdk to consume.
 		runtime.WithMetadata(func(ctx context.Context, req *http.Request) metadata.MD {
+			if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+				ctx, _ = context.WithTimeout(ctx, 10*time.Second)
+			}
 			md := make(metadata.MD, 2)
-			
 			md.Set("user-api-call", "true")
-			
 			for key := range req.Header {
-				// if the GRPCBlockHeightHeader is set, use that and ignore the height query parameter
 				if key == sdkgrpc.GRPCBlockHeightHeader {
 					return md
 				}
 			}
-			// The following checked endpoint prefixes have the height query parameter extracted.
 			if strings.HasPrefix(req.URL.Path, "/thorchain/") ||
 				strings.HasPrefix(req.URL.Path, "/cosmos/") ||
+				strings.HasPrefix(req.URL.Path, "/bank/") ||
 				strings.HasPrefix(req.URL.Path, "/bank/balances/") ||
+				strings.HasPrefix(req.URL.Path, "/auth/") ||
 				strings.HasPrefix(req.URL.Path, "/auth/accounts/") {
-				heightStr, ok := req.URL.Query()["height"]
-				if ok && len(heightStr) > 0 {
-					_, err := strconv.ParseInt(heightStr[0], 10, 64)
-					// if a valid int, set the GRPCBlockHeightHeader, the query server will error later on invalid height params
-					if err == nil {
+				if heightStr, ok := req.URL.Query()["height"]; ok && len(heightStr) > 0 {
+					if _, err := strconv.ParseInt(heightStr[0], 10, 64); err == nil {
 						md.Set(sdkgrpc.GRPCBlockHeightHeader, heightStr...)
 					}
 				}
