@@ -18,6 +18,14 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common/wasmpermissions"
 )
 
+var wasmPermMode = func() string {
+	m := strings.ToLower(strings.TrimSpace(os.Getenv("THOR_WASM_PERMISSION_MODE")))
+	if m == "permissionless" {
+		return "permissionless"
+	}
+	return ""
+}()
+
 var _ WasmManager = &WasmMgrVCUR{}
 
 // WasmMgrVCUR is VCUR implementation of slasher
@@ -339,14 +347,14 @@ func (m WasmMgrVCUR) checkChecksumHalt(ctx cosmos.Context, checksum []byte) erro
 }
 
 func (m WasmMgrVCUR) permissionedKeeper() *wasmkeeper.PermissionedKeeper {
-	if mode := os.Getenv("THOR_WASM_PERMISSION_MODE"); mode == "permissionless" {
+	if wasmPermMode == "permissionless" {
 		return wasmkeeper.NewDefaultPermissionKeeper(m.wasmKeeper)
 	}
 	return wasmkeeper.NewGovPermissionKeeper(m.wasmKeeper)
 }
 
 func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) error {
-	if mode := os.Getenv("THOR_WASM_PERMISSION_MODE"); mode == "permissionless" {
+	if wasmPermMode == "permissionless" {
 		return nil
 	}
 	err := m.checkActor(ctx, actor)
@@ -366,7 +374,7 @@ func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) 
 }
 
 func (m WasmMgrVCUR) checkCanInstantiate(ctx cosmos.Context, actor cosmos.AccAddress) error {
-	if mode := os.Getenv("THOR_WASM_PERMISSION_MODE"); mode == "permissionless" {
+	if wasmPermMode == "permissionless" {
 		return nil
 	}
 	err := m.checkActor(ctx, actor)
