@@ -2,8 +2,6 @@ package thorchain
 
 import (
 	"encoding/base32"
-	"strings"
-	"os"
 
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
@@ -347,16 +345,10 @@ func (m WasmMgrVCUR) checkChecksumHalt(ctx cosmos.Context, checksum []byte) erro
 }
 
 func (m WasmMgrVCUR) permissionedKeeper() *wasmkeeper.PermissionedKeeper {
-	if wasmPermMode == "permissionless" {
-		return wasmkeeper.NewDefaultPermissionKeeper(m.wasmKeeper)
-	}
 	return wasmkeeper.NewGovPermissionKeeper(m.wasmKeeper)
 }
 
 func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) error {
-	if wasmPermMode == "permissionless" {
-		return nil
-	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
@@ -374,9 +366,6 @@ func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) 
 }
 
 func (m WasmMgrVCUR) checkCanInstantiate(ctx cosmos.Context, actor cosmos.AccAddress) error {
-	if wasmPermMode == "permissionless" {
-		return nil
-	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
