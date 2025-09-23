@@ -3,6 +3,7 @@ package thorchain
 import (
 	"encoding/base32"
 	"strings"
+	"os"
 
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
@@ -338,6 +339,9 @@ func (m WasmMgrVCUR) checkChecksumHalt(ctx cosmos.Context, checksum []byte) erro
 }
 
 func (m WasmMgrVCUR) permissionedKeeper() *wasmkeeper.PermissionedKeeper {
+	if mode := os.Getenv("THOR_WASM_PERMISSION_MODE"); mode == "permissionless" {
+		return wasmkeeper.NewDefaultPermissionKeeper(m.wasmKeeper)
+	}
 	return wasmkeeper.NewGovPermissionKeeper(m.wasmKeeper)
 }
 
