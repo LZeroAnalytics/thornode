@@ -346,6 +346,9 @@ func (m WasmMgrVCUR) permissionedKeeper() *wasmkeeper.PermissionedKeeper {
 }
 
 func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) error {
+	if mode := os.Getenv("THOR_WASM_PERMISSION_MODE"); mode == "permissionless" {
+		return nil
+	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
@@ -363,6 +366,9 @@ func (m WasmMgrVCUR) checkCanStore(ctx cosmos.Context, actor cosmos.AccAddress) 
 }
 
 func (m WasmMgrVCUR) checkCanInstantiate(ctx cosmos.Context, actor cosmos.AccAddress) error {
+	if mode := os.Getenv("THOR_WASM_PERMISSION_MODE"); mode == "permissionless" {
+		return nil
+	}
 	err := m.checkActor(ctx, actor)
 	if err != nil {
 		return err
