@@ -7,23 +7,18 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
-	"gitlab.com/thorchain/thornode/v3/x/thorchain"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 )
-
-var _ thorchain.WasmManager = &WasmMgrPermissionless{}
 
 type WasmMgrPermissionless struct {
 	keeper     keeper.Keeper
 	wasmKeeper wasmkeeper.Keeper
-	eventMgr   thorchain.EventManager
 }
 
-func NewWasmMgrPermissionless(k keeper.Keeper, wk wasmkeeper.Keeper, ev thorchain.EventManager) (*WasmMgrPermissionless, error) {
+func NewWasmMgrPermissionless(k keeper.Keeper, wk wasmkeeper.Keeper) (*WasmMgrPermissionless, error) {
 	return &WasmMgrPermissionless{
 		keeper:     k,
 		wasmKeeper: wk,
-		eventMgr:   ev,
 	}, nil
 }
 

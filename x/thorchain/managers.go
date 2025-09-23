@@ -593,7 +593,7 @@ func GetSecuredAssetManager(version semver.Version, keeper keeper.Keeper, eventM
 
 func GetWasmManager(ctx cosmos.Context, keeper keeper.Keeper, wasmKeeper wasmkeeper.Keeper, eventMgr EventManager) (WasmManager, error) {
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("THOR_WASM_MANAGER")), "bloctopus") {
-		return bloctopus.NewWasmMgrPermissionless(keeper, wasmKeeper, eventMgr)
+		return bloctopus.NewWasmMgrPermissionless(keeper, wasmKeeper)
 	}
 	return newWasmMgrVCUR(keeper, wasmKeeper, wasmpermissions.GetWasmPermissions(), eventMgr)
 }
