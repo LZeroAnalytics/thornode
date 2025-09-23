@@ -16,13 +16,6 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common/wasmpermissions"
 )
 
-var wasmPermMode = func() string {
-	m := strings.ToLower(strings.TrimSpace(os.Getenv("THOR_WASM_PERMISSION_MODE")))
-	if m == "permissionless" {
-		return "permissionless"
-	}
-	return ""
-}()
 
 var _ WasmManager = &WasmMgrVCUR{}
 
