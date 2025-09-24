@@ -42,6 +42,9 @@ func (m WasmMgrPermissionless) InstantiateContract(
 	label string,
 	deposit sdk.Coins,
 ) (sdk.AccAddress, []byte, error) {
+	if err := m.maybePin(ctx, codeID); err != nil {
+		return nil, nil, err
+	}
 	return m.permKeeper().Instantiate(ctx, codeID, creator, admin, initMsg, label, deposit)
 }
 
@@ -55,6 +58,9 @@ func (m WasmMgrPermissionless) InstantiateContract2(
 	salt []byte,
 	fixMsg bool,
 ) (sdk.AccAddress, []byte, error) {
+	if err := m.maybePin(ctx, codeID); err != nil {
+		return nil, nil, err
+	}
 	return m.permKeeper().Instantiate2(ctx, codeID, creator, admin, initMsg, label, deposit, salt, fixMsg)
 }
 
@@ -73,7 +79,20 @@ func (m WasmMgrPermissionless) MigrateContract(
 	newCodeID uint64,
 	msg []byte,
 ) ([]byte, error) {
-	return m.permKeeper().Migrate(ctx, contractAddress, caller, newCodeID, msg)
+	if err := m.maybePin(ctx, newCodeID); err != nil {
+		return nil, err
+	}
+	data, err := m.permKeeper().Migrate(ctx, contractAddress, caller, newCodeID, msg)
+	if err != nil {
+		return nil, err
+	}
+	contractInfo := m.wasmKeeper.GetContractInfo(ctx, contractAddress)
+	if contractInfo != nil {
+		if err := m.maybeUnpin(ctx, contractInfo.CodeID); err != nil {
+			return nil, err
+		}
+	}
+	return data, nil
 }
 
 func (m WasmMgrPermissionless) SudoContract(
@@ -104,4 +123,32 @@ func (m WasmMgrPermissionless) getCodeInfo(ctx cosmos.Context, id uint64) (*wasm
 		return nil, wasmtypes.ErrNotFound
 	}
 	return codeInfo, nil
+}
+
+func (m WasmMgrPermissionless) maybePin(ctx cosmos.Context, codeId uint64) error {
+	var instanceCount int
+	m.wasmKeeper.IterateContractsByCode(ctx, codeId, func(address sdk.AccAddress) bool {
+		instanceCount++
+		return true
+	})
+	if instanceCount == 0 {
+		if err := m.permKeeper().PinCode(ctx, codeId); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m WasmMgrPermissionless) maybeUnpin(ctx cosmos.Context, codeId uint64) error {
+	var instanceCount int
+	m.wasmKeeper.IterateContractsByCode(ctx, codeId, func(address sdk.AccAddress) bool {
+		instanceCount++
+		return true
+	})
+	if instanceCount == 0 {
+		if err := m.permKeeper().UnpinCode(ctx, codeId); err != nil {
+			return err
+		}
+	}
+	return nil
 }
