@@ -3,6 +3,9 @@ package thorchain
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strings"
+
 
 	"cosmossdk.io/core/store"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
@@ -21,6 +24,8 @@ import (
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	kv1 "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/v1"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/types"
+	"gitlab.com/thorchain/thornode/v3/x/bloctopus"
+
 )
 
 const (
@@ -587,6 +592,9 @@ func GetSecuredAssetManager(version semver.Version, keeper keeper.Keeper, eventM
 }
 
 func GetWasmManager(ctx cosmos.Context, keeper keeper.Keeper, wasmKeeper wasmkeeper.Keeper, eventMgr EventManager) (WasmManager, error) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("THOR_WASM_MANAGER")), "bloctopus") {
+		return bloctopus.NewWasmMgrPermissionless(keeper, wasmKeeper)
+	}
 	return newWasmMgrVCUR(keeper, wasmKeeper, wasmpermissions.GetWasmPermissions(), eventMgr)
 }
 

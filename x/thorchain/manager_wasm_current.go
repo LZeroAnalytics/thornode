@@ -17,6 +17,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/common/wasmpermissions"
 )
 
+
 var _ WasmManager = &WasmMgrVCUR{}
 
 // WasmMgrVCUR is VCUR implementation of slasher
