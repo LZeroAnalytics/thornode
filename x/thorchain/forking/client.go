@@ -454,16 +454,19 @@ func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height 
 	if address == "" {
 		return nil, nil
 	}
-	
+
 	req := &types.QueryBalancesRequest{
 		Address: address,
 	}
-	
+
 	resp, err := c.queryClient.Balances(ctx, req)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("gRPC balances query failed: %w", err)
 	}
-	
+
 	return c.codec.Marshal(resp)
 }
 
@@ -607,6 +610,59 @@ func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 }
 
 func (c *remoteClient) extractAddressFromKey(key string) string {
+	lower := strings.ToLower(key)
+
+	if idx := strings.Index(lower, "account/"); idx != -1 {
+		rest := strings.Trim(key[idx+len("account/"):], "/")
+		if rest != "" {
+			if i := strings.Index(rest, "/"); i != -1 {
+				return rest[:i]
+			}
+			return rest
+		}
+	}
+
+	if idx := strings.Index(lower, "balances/"); idx != -1 {
+		rest := strings.Trim(key[idx+len("balances/"):], "/")
+		if rest != "" {
+			if i := strings.Index(rest, "/"); i != -1 {
+				return rest[:i]
+			}
+			return rest
+		}
+	}
+
+	if idx := strings.Index(lower, "balance/"); idx != -1 {
+		rest := strings.Trim(key[idx+len("balance/"):], "/")
+		if rest != "" {
+			if i := strings.Index(rest, "/"); i != -1 {
+				return rest[:i]
+			}
+			return rest
+		}
+	}
+
+	if idx := strings.Index(lower, "account"); idx != -1 {
+		rest := strings.TrimSpace(key[idx+len("account"):])
+		rest = strings.TrimLeft(rest, "/")
+		if rest != "" {
+			if i := strings.Index(rest, "/"); i != -1 {
+				return rest[:i]
+			}
+			return rest
+		}
+	}
+	if idx := strings.Index(lower, "balances"); idx != -1 {
+		rest := strings.TrimSpace(key[idx+len("balances"):])
+		rest = strings.TrimLeft(rest, "/")
+		if rest != "" {
+			if i := strings.Index(rest, "/"); i != -1 {
+				return rest[:i]
+			}
+			return rest
+		}
+	}
+
 	parts := strings.Split(key, "/")
 	if len(parts) > 1 {
 		return parts[1]
