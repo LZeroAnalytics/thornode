@@ -66,6 +66,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/mint"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+
+	forkbankkeeper "gitlab.com/thorchain/thornode/v3/x/bloctopus/forkbank/keeper"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -147,7 +149,7 @@ type THORChainApp struct {
 	// keepers
 	AccountKeeper authkeeper.AccountKeeper
 	AuthzKeeper   authzkeeper.Keeper
-	BankKeeper    bankkeeper.BaseKeeper
+	BankKeeper    bankkeeper.Keeper
 	StakingKeeper *stakingkeeper.Keeper
 	MintKeeper    mintkeeper.Keeper
 	UpgradeKeeper *upgradekeeper.Keeper
@@ -305,7 +307,7 @@ func NewChainApp(
 		app.MsgServiceRouter(),
 		app.AccountKeeper,
 	)
-	app.BankKeeper = bankkeeper.NewBaseKeeper(
+	baseBank := bankkeeper.NewBaseKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(keys[banktypes.StoreKey]),
 		app.AccountKeeper,
@@ -313,6 +315,13 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		logger,
 	)
+	fbk, err := forkbankkeeper.NewForkingBankKeeper(baseBank, forkbankkeeper.Config{
+		Endpoint: "grpc.thor.pfc.zone:443",
+	})
+	if err != nil {
+		panic(err)
+	}
+	app.BankKeeper = fbk
 
 	txSigningOptions, err := tx.NewDefaultSigningOptions()
 	if err != nil {
