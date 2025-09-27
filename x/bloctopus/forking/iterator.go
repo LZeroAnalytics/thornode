@@ -1,6 +1,11 @@
-//go:build bloctopus_forking_moved
-
 package forking
+
+import (
+	"bytes"
+	"fmt"
+
+	storetypes "cosmossdk.io/core/store"
+)
 
 type MergedIterator struct {
 	local   storetypes.Iterator
@@ -147,7 +152,6 @@ func (mi *MergedIterator) selectNext() {
 			mi.takeRemote()
 		}
 	default:
-		// equal, LOCAL wins
 		mi.takeLocal()
 		mi.remote.Next()
 	}
@@ -166,8 +170,6 @@ func (mi *MergedIterator) takeRemote() {
 	mi.curKey = mi.remote.Key()
 	mi.curValue = mi.remote.Value()
 }
-
-// RemoteIterator implements storetypes.Iterator over a slice of KeyValue
 
 type RemoteIterator struct {
 	items   []KeyValue

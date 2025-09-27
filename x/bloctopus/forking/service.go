@@ -1,6 +1,12 @@
-//go:build bloctopus_forking_moved
-
 package forking
+
+import (
+	"context"
+	"sync"
+
+	storetypes "cosmossdk.io/core/store"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+)
 
 type forkingKVStoreService struct {
 	parent       storetypes.KVStoreService
@@ -103,7 +109,7 @@ func (f *forkingKVStoreService) updateStats(remoteFetch bool, cacheHit bool, gas
 		f.stats.ProofFailures++
 	}
 
-	alpha := 0.1 // smoothing factor
+	alpha := 0.1
 	if cacheHit {
 		f.stats.CacheHitRatio = alpha*1.0 + (1-alpha)*f.stats.CacheHitRatio
 	} else {

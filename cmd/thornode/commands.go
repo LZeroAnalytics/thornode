@@ -53,7 +53,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/client/cli"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
-	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
+	"gitlab.com/thorchain/thornode/v3/x/bloctopus/forking"
 
 	"github.com/CosmWasm/wasmd/x/wasm"
 	wasmcli "github.com/CosmWasm/wasmd/x/wasm/client/cli"

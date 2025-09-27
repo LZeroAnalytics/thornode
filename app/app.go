@@ -82,7 +82,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/openapi"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
-	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
+	"gitlab.com/thorchain/thornode/v3/x/bloctopus/forking"
 	thorchainkeeper "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	thorchainkeeperabci "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/abci"
 	thorchainkeeperv1 "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/v1"
@@ -94,6 +94,8 @@ import (
 
 	evm "github.com/cosmos/evm/encoding/codec"
 	"github.com/cosmos/evm/ethereum/eip712"
+
+	forkbankkeeper "gitlab.com/thorchain/thornode/v3/x/bloctopus/forkbank/keeper"
 )
 
 const (
@@ -134,6 +136,9 @@ var (
 	_ servertypes.Application = (*THORChainApp)(nil)
 )
 
+
+
+
 // ChainApp extended ABCI application
 type THORChainApp struct {
 	*baseapp.BaseApp
@@ -149,7 +154,7 @@ type THORChainApp struct {
 	// keepers
 	AccountKeeper authkeeper.AccountKeeper
 	AuthzKeeper   authzkeeper.Keeper
-	BankKeeper    bankkeeper.BaseKeeper
+	BankKeeper    bankkeeper.Keeper
 	StakingKeeper *stakingkeeper.Keeper
 	MintKeeper    mintkeeper.Keeper
 	UpgradeKeeper *upgradekeeper.Keeper
@@ -310,7 +315,7 @@ func NewChainApp(
 		app.MsgServiceRouter(),
 		app.AccountKeeper,
 	)	
-	app.BankKeeper = bankkeeper.NewBaseKeeper(
+	baseBank := bankkeeper.NewBaseKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(keys[banktypes.StoreKey]),
 		app.AccountKeeper,
@@ -318,6 +323,7 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		logger,
 	)
+	app.BankKeeper = baseBank
 
 	txSigningOptions, err := tx.NewDefaultSigningOptions()
 	if err != nil {
@@ -369,6 +375,20 @@ func NewChainApp(
 	forkingGRPC := cast.ToString(appOpts.Get("fork.grpc"))
 	forkingChainID := cast.ToString(appOpts.Get("fork.chain-id"))
 	forkingEnabled := forkingGRPC != "" && forkingChainID != ""
+
+	if forkingEnabled {
+		cfg := forkbankkeeper.Config{
+			GRPCEndpoint: forkingGRPC,
+			ChainID:      forkingChainID,
+			Timeout:      cast.ToDuration(appOpts.Get("fork.timeout")),
+			ModuleName:   thorchain.ModuleName,
+		}
+		fbk, err := forkbankkeeper.NewForkingBankKeeper(baseBank, cfg)
+		if err != nil {
+			panic(fmt.Errorf("failed to init ForkingBankKeeper: %w", err))
+		}
+		app.BankKeeper = fbk
+	}
 
 	var forkingConfig forking.RemoteConfig
 	var remoteClient forking.RemoteClient
@@ -475,7 +495,7 @@ func NewChainApp(
 			sdk.GetConfig().GetBech32AccountAddrPrefix(),
 			authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		)
-		app.BankKeeper = bankkeeper.NewBaseKeeper(
+		baseBank := bankkeeper.NewBaseKeeper(
 			app.appCodec,
 			bankStoreService,
 			app.AccountKeeper,
@@ -483,6 +503,17 @@ func NewChainApp(
 			authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 			logger,
 		)
+		cfg := forkbankkeeper.Config{
+			GRPCEndpoint: forkingGRPC,
+			ChainID:      forkingChainID,
+			Timeout:      cast.ToDuration(appOpts.Get("fork.timeout")),
+			ModuleName:   thorchain.ModuleName,
+		}
+		fbk, err := forkbankkeeper.NewForkingBankKeeper(baseBank, cfg)
+		if err != nil {
+			panic(fmt.Sprintf("failed to init ForkingBankKeeper: %s", err))
+		}
+		app.BankKeeper = fbk
 	} else {
 		thorchainStoreService = runtime.NewKVStoreService(keys[thorchaintypes.StoreKey])
 	}
@@ -569,7 +600,7 @@ func NewChainApp(
 	// must be passed by reference here.
 	authModule := auth.NewAppModule(app.appCodec, app.AccountKeeper, authsims.RandomGenesisAccounts, app.GetSubspace(authtypes.ModuleName))
 	authzModule := authzmodule.NewAppModule(app.appCodec, app.AuthzKeeper, app.AccountKeeper, app.BankKeeper, app.InterfaceRegistry())
-	bankModule := bank.NewAppModule(app.appCodec, app.BankKeeper, app.AccountKeeper, app.GetSubspace(banktypes.ModuleName))
+	bankModule := bank.NewAppModule(app.appCodec, baseBank, app.AccountKeeper, app.GetSubspace(banktypes.ModuleName))
 	consensusModule := consensus.NewAppModule(app.appCodec, app.ConsensusParamsKeeper)
 	genutilModule := genutil.NewAppModule(app.AccountKeeper, app.StakingKeeper, app, txConfig)
 	// trunk-ignore(golangci-lint/staticcheck): deprecated TODO: SDK 0.53 cleanup

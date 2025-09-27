@@ -1,6 +1,10 @@
-//go:build bloctopus_forking_moved
-
 package forking
+
+import (
+	"time"
+
+	"github.com/spf13/cobra"
+)
 
 const (
 	FlagForkGRPC            = "fork.grpc"

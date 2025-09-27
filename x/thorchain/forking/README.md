@@ -1,3 +1,4 @@
+This package has moved to x/bloctopus/forking. The sources here are excluded from build via go:build tag.
 # THORChain Forking Module
 
 This module implements forking capabilities for THORNode, allowing a local node to pull contract and account data in real-time from a remote THORChain mainnet when they don't exist in the local database.

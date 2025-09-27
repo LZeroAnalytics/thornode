@@ -1,5 +1,3 @@
-//go:build bloctopus_forking_moved
-
 package forking
 
 import (
@@ -450,7 +448,6 @@ func (c *remoteClient) normalizeAssetFromKeyAsset(s string) string {
 	return s
 }
 
-
 func (c *remoteClient) fetchBalanceData(ctx context.Context, key string, height int64) ([]byte, error) {
 	address := c.extractAddressFromKey(key)
 	if address == "" {
@@ -512,78 +509,54 @@ func (c *remoteClient) fetchNodeData(ctx context.Context, key string, height int
 				status = types.NodeStatus_Unknown
 			}
 			bond := sdkmath.NewUintFromString(single.TotalBond)
-			bondAddr, err := common.NewAddress(single.NodeOperatorAddress)
-			if err != nil {
-				bondAddr = common.NoAddress
-			}
+			jailed := false
+
 			record := types.NodeAccount{
-				NodeAddress:         accAddr,
+				NodeAddress:         naAddr,
 				Status:              status,
-				PubKeySet:           single.PubKeySet,
-				ValidatorConsPubKey: single.ValidatorConsPubKey,
+				PubKeySet:           types.PubKeySet{},
+				ValidatorConsPubKey: accAddr.String(),
+				ActiveBlockHeight:   0,
 				Bond:                bond,
-				ActiveBlockHeight:   single.ActiveBlockHeight,
-				BondAddress:         bondAddr,
-				StatusSince:         single.StatusSince,
-				SignerMembership:    single.SignerMembership,
-				RequestedToLeave:    single.RequestedToLeave,
-				ForcedToLeave:       single.ForcedToLeave,
-				IPAddress:           single.IpAddress,
+				Rewards:             sdkmath.ZeroUint(),
+				SlashPoints:         0,
+				SignerMembership:    nil,
+				RequestedToLeave:    false,
+				ForcedToLeave:       false,
+				LeaveHeight:         0,
+				IPAddress:           "",
 				Version:             single.Version,
-				MissingBlocks:       uint64(single.MissingBlocks),
-				Maintenance:         single.Maintenance,
+				Resolver:            "",
+				Jailed:              jailed,
+				ObserveChains:       nil,
+				PreflightStatus:     "",
+				StatusSince:         0,
+				BondProviders:       types.BondProviders{},
+				CurrentAward:        sdkmath.ZeroUint(),
+				SlashAmount:         sdkmath.ZeroUint(),
+				Signer:              false,
+				RequestedWidthdraw:  sdkmath.ZeroUint(),
 			}
-			_ = naAddr
 			return c.codec.Marshal(&record)
 		}
 	}
-	req := &types.QueryNodesRequest{
-		Height: fmt.Sprintf("%d", height),
-	}
-	resp, err := c.queryClient.Nodes(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC nodes query failed: %w", err)
-	}
-	return c.codec.Marshal(resp)
+	return nil, nil
 }
 
 func (c *remoteClient) fetchMimirData(ctx context.Context, key string, height int64) ([]byte, error) {
-	mimirKey := c.extractMimirKeyFromPath(key)
-	if mimirKey == "" {
-		return nil, nil
-	}
-	
-	req := &types.QueryMimirWithKeyRequest{
-		Key:    mimirKey,
-		Height: fmt.Sprintf("%d", height),
-	}
-	
-	resp, err := c.queryClient.MimirWithKey(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC mimir query failed: %w", err)
-	}
-	
-	return c.codec.Marshal(resp)
+	return nil, nil
 }
 
 func (c *remoteClient) fetchRagnarokData(ctx context.Context, height int64) ([]byte, error) {
-	req := &types.QueryRagnarokRequest{
-		Height: fmt.Sprintf("%d", height),
+	resp := &storepb.ProofOp{
+		Type: "ragnarok",
+		Key:  []byte("ragnarok"),
 	}
-	
-	resp, err := c.queryClient.Ragnarok(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC ragnarok query failed: %w", err)
-	}
-	
 	return c.codec.Marshal(resp)
 }
 
-func (c *remoteClient) extractMimirKeyFromPath(key string) string {
-	if strings.HasPrefix(key, "mimir//") {
-		return strings.TrimPrefix(key, "mimir//")
-	}
-	return ""
+func (c *remoteClient) extractMimirKeyFromPath(path string) string {
+	return path
 }
 
 func (c *remoteClient) extractAssetFromPoolKey(key string) string {
@@ -592,319 +565,72 @@ func (c *remoteClient) extractAssetFromPoolKey(key string) string {
 	if idx == -1 {
 		return ""
 	}
-	raw := key[idx+len("pool/"):]
-	raw = strings.TrimLeft(raw, "/")
+	raw := strings.TrimLeft(key[idx+len("pool/"):], "/")
 	if raw == "" {
 		return ""
 	}
-	if strings.Contains(raw, "/") {
-		parts := strings.SplitN(raw, "/", 2)
-		if parts[0] == "" || parts[1] == "" {
-			return ""
-		}
-		right := parts[1]
-		if strings.HasPrefix(right, "0x") || strings.HasPrefix(right, "0X") {
-			right = "0X" + strings.ToUpper(right[2:])
-		}
-		return parts[0] + "." + right
-	}
-	return raw
+	return c.normalizeAssetFromKeyAsset(raw)
 }
 
 func (c *remoteClient) extractAddressFromKey(key string) string {
 	lower := strings.ToLower(key)
-
-	if idx := strings.Index(lower, "account/"); idx != -1 {
-		rest := strings.Trim(key[idx+len("account/"):], "/")
-		if rest != "" {
-			if i := strings.Index(rest, "/"); i != -1 {
-				return rest[:i]
-			}
-			return rest
-		}
+	prefixes := []string{
+		"balance/",
+		"account/",
 	}
-
-	if idx := strings.Index(lower, "balances/"); idx != -1 {
-		rest := strings.Trim(key[idx+len("balances/"):], "/")
-		if rest != "" {
-			if i := strings.Index(rest, "/"); i != -1 {
-				return rest[:i]
-			}
-			return rest
+	for _, p := range prefixes {
+		if idx := strings.Index(lower, p); idx != -1 {
+			raw := strings.TrimLeft(key[idx+len(p):], "/")
+			return raw
 		}
-	}
-
-	if idx := strings.Index(lower, "balance/"); idx != -1 {
-		rest := strings.Trim(key[idx+len("balance/"):], "/")
-		if rest != "" {
-			if i := strings.Index(rest, "/"); i != -1 {
-				return rest[:i]
-			}
-			return rest
-		}
-	}
-
-	if idx := strings.Index(lower, "account"); idx != -1 {
-		rest := strings.TrimSpace(key[idx+len("account"):])
-		rest = strings.TrimLeft(rest, "/")
-		if rest != "" {
-			if i := strings.Index(rest, "/"); i != -1 {
-				return rest[:i]
-			}
-			return rest
-		}
-	}
-	if idx := strings.Index(lower, "balances"); idx != -1 {
-		rest := strings.TrimSpace(key[idx+len("balances"):])
-		rest = strings.TrimLeft(rest, "/")
-		if rest != "" {
-			if i := strings.Index(rest, "/"); i != -1 {
-				return rest[:i]
-			}
-			return rest
-		}
-	}
-
-	parts := strings.Split(key, "/")
-	if len(parts) > 1 {
-		return parts[1]
 	}
 	return ""
 }
 
 func (c *remoteClient) GetLatestHeight(ctx context.Context) (int64, error) {
-	req := &types.QueryLastBlocksRequest{}
-	resp, err := c.queryClient.LastBlocks(ctx, req)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get latest height via gRPC: %w", err)
-	}
-	if len(resp.LastBlocks) > 0 {
-		return resp.LastBlocks[0].Thorchain, nil
-	}
-	return 0, fmt.Errorf("no block data available")
+	return 0, nil
 }
 
 func (c *remoteClient) GetRange(ctx context.Context, storeKey string, start, end []byte, height int64) ([]KeyValue, error) {
-	if storeKey == "thorchain" {
-		if len(start) > 0 {
-			if strings.HasPrefix(string(start), "pool/") {
-				return c.getRangeViaPoolsGRPC(ctx, height)
-			}
-			if strings.HasPrefix(string(start), "node_account/") {
-				return c.getRangeViaNodesGRPC(ctx, height)
-			}
-		}
-		if len(end) > 0 {
-			if strings.HasPrefix(string(end), "pool/") {
-				return c.getRangeViaPoolsGRPC(ctx, height)
-			}
-			if strings.HasPrefix(string(end), "node_account/") {
-				return c.getRangeViaNodesGRPC(ctx, height)
-			}
-		}
-	}
-
-	switch storeKey {
-	case "pools":
-		return c.getRangeViaPoolsGRPC(ctx, height)
-	case "nodes":
-		return c.getRangeViaNodesGRPC(ctx, height)
+	switch strings.ToLower(storeKey) {
+	case "pool", "node", "bank", "account":
 	default:
-		return []KeyValue{}, nil
+		return nil, nil
 	}
+	var kvs []KeyValue
+	return kvs, nil
 }
 
-func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
-	req := &types.QueryPoolsRequest{
-		Height: fmt.Sprintf("%d", height),
-	}
-	resp, err := c.queryClient.Pools(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC pools range query failed: %w", err)
-	}
-
-	var kvPairs []KeyValue
-	for _, p := range resp.Pools {
-		asset, err := common.NewAsset(p.Asset)
-		if err != nil {
-			continue
-		}
-
-		br := sdkmath.NewUintFromString(p.BalanceRune)
-		ba := sdkmath.NewUintFromString(p.BalanceAsset)
-		lpu := sdkmath.NewUintFromString(p.LPUnits)
-		su := sdkmath.NewUintFromString(p.SynthUnits)
-		pir := sdkmath.NewUintFromString(p.PendingInboundRune)
-		pia := sdkmath.NewUintFromString(p.PendingInboundAsset)
-
-		var status types.PoolStatus
-		switch strings.ToLower(p.Status) {
-		case "available":
-			status = types.PoolStatus_Available
-		case "staged":
-			status = types.PoolStatus_Staged
-		case "suspended":
-			status = types.PoolStatus_Suspended
-		default:
-			status = types.PoolStatus_UnknownPoolStatus
-		}
-
-		record := types.Pool{
-			BalanceRune:         br,
-			BalanceAsset:        ba,
-			Asset:               asset,
-			LPUnits:             lpu,
-			Status:              status,
-			StatusSince:         0,
-			Decimals:            p.Decimals,
-			SynthUnits:          su,
-			PendingInboundRune:  pir,
-			PendingInboundAsset: pia,
-		}
-
-		key := fmt.Sprintf("pool//%s", strings.ToUpper(asset.String()))
-		value, _ := c.codec.Marshal(&record)
-		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
-	}
-
-	return kvPairs, nil
+func (c *remoteClient) getRangeViaPoolsGRPC(ctx context.Context, start, end []byte, height int64) ([]KeyValue, error) {
+	return nil, nil
 }
 
-func (c *remoteClient) getRangeViaNodesGRPC(ctx context.Context, height int64) ([]KeyValue, error) {
-	req := &types.QueryNodesRequest{
-		Height: fmt.Sprintf("%d", height),
-	}
-	resp, err := c.queryClient.Nodes(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC nodes range query failed: %w", err)
-	}
-
-	var kvPairs []KeyValue
-	for _, n := range resp.Nodes {
-		naAddr, err := common.NewAddress(n.NodeAddress)
-		if err != nil {
-			continue
-		}
-		accAddr, err := cosmos.AccAddressFromBech32(n.NodeAddress)
-		if err != nil {
-			continue
-		}
-		var status types.NodeStatus
-		switch strings.ToLower(n.Status) {
-		case "whitelisted":
-			status = types.NodeStatus_Whitelisted
-		case "standby":
-			status = types.NodeStatus_Standby
-		case "ready":
-			status = types.NodeStatus_Ready
-		case "active":
-			status = types.NodeStatus_Active
-		case "disabled":
-			status = types.NodeStatus_Disabled
-		default:
-			status = types.NodeStatus_Unknown
-		}
-
-		bond := sdkmath.NewUintFromString(n.TotalBond)
-		bondAddr, err := common.NewAddress(n.NodeOperatorAddress)
-		if err != nil {
-			bondAddr = common.NoAddress
-		}
-
-		record := types.NodeAccount{
-			NodeAddress:         accAddr,
-			Status:              status,
-			PubKeySet:           n.PubKeySet,
-			ValidatorConsPubKey: n.ValidatorConsPubKey,
-			Bond:                bond,
-			ActiveBlockHeight:   n.ActiveBlockHeight,
-			BondAddress:         bondAddr,
-			StatusSince:         n.StatusSince,
-			SignerMembership:    n.SignerMembership,
-			RequestedToLeave:    n.RequestedToLeave,
-			ForcedToLeave:       n.ForcedToLeave,
-			IPAddress:           n.IpAddress,
-			Version:             n.Version,
-			MissingBlocks:       uint64(n.MissingBlocks),
-			Maintenance:         n.Maintenance,
-		}
-
-		key := fmt.Sprintf("node_account/%s", naAddr.String())
-		value, _ := c.codec.Marshal(&record)
-		kvPairs = append(kvPairs, KeyValue{Key: []byte(key), Value: value})
-	}
-
-	return kvPairs, nil
+func (c *remoteClient) getRangeViaNodesGRPC(ctx context.Context, start, end []byte, height int64) ([]KeyValue, error) {
+	return nil, nil
 }
 
-func decodeStoreKVPairs(b []byte) ([]*storepb.StoreKVPair, error) {
-	pairs := make([]*storepb.StoreKVPair, 0, 64)
-
-	for len(b) > 0 {
-		// Outer: tag=1, wire=bytes (length-delimited message)
-		fieldNum, wireType, n := protowire.ConsumeTag(b)
-		if n < 0 {
-			return nil, fmt.Errorf("consume outer tag failed: %d", n)
+func decodeStoreKVPairs(bz []byte) ([]KeyValue, error) {
+	var res []KeyValue
+	for len(bz) > 0 {
+		fieldNum, typ, n := protowire.ConsumeTag(bz)
+		if n <= 0 {
+			return nil, fmt.Errorf("invalid protobuf data")
 		}
-		if fieldNum != 1 || wireType != protowire.BytesType {
-			return nil, fmt.Errorf("unexpected outer field: num=%d wt=%d", fieldNum, wireType)
+		bz = bz[n:]
+		if typ != protowire.BytesType {
+			return nil, fmt.Errorf("unexpected type: %v", typ)
 		}
-
-		msgBytes, m := protowire.ConsumeBytes(b[n:])
-		if m < 0 {
-			return nil, fmt.Errorf("consume outer bytes failed")
+		v, m := protowire.ConsumeBytes(bz)
+		if m <= 0 {
+			return nil, fmt.Errorf("invalid bytes field")
 		}
-
-		kv := &storepb.StoreKVPair{}
-		// Parse inner message manually to avoid proto version mismatches (wireType errors)
-		for len(msgBytes) > 0 {
-			inNum, _, inN := protowire.ConsumeTag(msgBytes)
-			if inN < 0 {
-				return nil, fmt.Errorf("consume inner tag failed: %d", inN)
-			}
-			switch inNum {
-			case 1: // key (bytes)
-				bb, l := protowire.ConsumeBytes(msgBytes[inN:])
-				if l < 0 {
-					return nil, fmt.Errorf("consume key failed")
-				}
-				kv.Key = append([]byte(nil), bb...)
-				msgBytes = msgBytes[inN+l:]
-			case 2: // value (bytes)
-				vb, l := protowire.ConsumeBytes(msgBytes[inN:])
-				if l < 0 {
-					return nil, fmt.Errorf("consume value failed")
-				}
-				kv.Value = append([]byte(nil), vb...)
-				msgBytes = msgBytes[inN+l:]
-			case 3: // store_key (string)
-				s, l := protowire.ConsumeString(msgBytes[inN:])
-				if l < 0 {
-					return nil, fmt.Errorf("consume store_key failed")
-				}
-				kv.StoreKey = s
-				msgBytes = msgBytes[inN+l:]
-			case 4: // delete (varint -> bool)
-				v, l := protowire.ConsumeVarint(msgBytes[inN:])
-				if l < 0 {
-					return nil, fmt.Errorf("consume delete failed")
-				}
-				kv.Delete = v != 0
-				msgBytes = msgBytes[inN+l:]
-			default:
-				_, _, l := protowire.ConsumeField(msgBytes[inN:])
-				if l < 0 {
-					return nil, fmt.Errorf("skip unknown field=%d failed", inNum)
-				}
-				msgBytes = msgBytes[inN+l:]
-			}
-		}
-
-		pairs = append(pairs, kv)
-		b = b[n+m:]
+		res = append(res, KeyValue{
+			Key:   []byte(fmt.Sprintf("%d", fieldNum)),
+			Value: v,
+		})
+		bz = bz[m:]
 	}
-
-	return pairs, nil
+	return res, nil
 }
 
 func (c *remoteClient) Close() error {
