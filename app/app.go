@@ -600,7 +600,7 @@ func NewChainApp(
 	// must be passed by reference here.
 	authModule := auth.NewAppModule(app.appCodec, app.AccountKeeper, authsims.RandomGenesisAccounts, app.GetSubspace(authtypes.ModuleName))
 	authzModule := authzmodule.NewAppModule(app.appCodec, app.AuthzKeeper, app.AccountKeeper, app.BankKeeper, app.InterfaceRegistry())
-	bankModule := bank.NewAppModule(app.appCodec, app.BankKeeper, app.AccountKeeper, app.GetSubspace(banktypes.ModuleName))
+	bankModule := bank.NewAppModule(app.appCodec, baseBank, app.AccountKeeper, app.GetSubspace(banktypes.ModuleName))
 	consensusModule := consensus.NewAppModule(app.appCodec, app.ConsensusParamsKeeper)
 	genutilModule := genutil.NewAppModule(app.AccountKeeper, app.StakingKeeper, app, txConfig)
 	// trunk-ignore(golangci-lint/staticcheck): deprecated TODO: SDK 0.53 cleanup
