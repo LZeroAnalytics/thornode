@@ -1,6 +1,6 @@
 package forking
 
-import storetypes "cosmossdk.io/core/store"
+import storetypes "cosmossdk.io/store/types"
 
 type KVStore struct {
 	store storetypes.KVStore
