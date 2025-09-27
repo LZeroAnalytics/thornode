@@ -57,17 +57,27 @@ func (k ForkingBankKeeper) GetDenomMetaData(ctx context.Context, denom string) (
 	if found {
 		return md, true
 	}
+	k.ensureDenomMetadata(ctx)
+	return k.BaseKeeper.GetDenomMetaData(ctx, denom)
+}
+func (k ForkingBankKeeper) ensureDenomMetadata(ctx context.Context) {
+	all := k.BaseKeeper.GetAllDenomMetaData(ctx)
+	if len(all) > 0 {
+		return
+	}
 	resp, err := k.client.RemoteDenomsMetadata(ctx)
-	if err != nil || resp == nil {
-		return banktypes.Metadata{}, false
+	if err != nil || resp == nil || len(resp.Metadatas) == 0 {
+		return
 	}
 	for _, m := range resp.Metadatas {
-		if m.Base == denom {
-			return m, true
-		}
+		k.BaseKeeper.SetDenomMetaData(ctx, m)
 	}
-	return banktypes.Metadata{}, false
 }
+func (k ForkingBankKeeper) EnsureDenomMetadata(ctx context.Context) {
+	k.ensureDenomMetadata(ctx)
+}
+
+
 
 func (k ForkingBankKeeper) GetAllDenomMetaData(ctx context.Context) []banktypes.Metadata {
 	all := k.BaseKeeper.GetAllDenomMetaData(ctx)
@@ -75,8 +85,11 @@ func (k ForkingBankKeeper) GetAllDenomMetaData(ctx context.Context) []banktypes.
 		return all
 	}
 	resp, err := k.client.RemoteDenomsMetadata(ctx)
-	if err != nil || resp == nil {
+	if err != nil || resp == nil || len(resp.Metadatas) == 0 {
 		return nil
 	}
-	return resp.Metadatas
+	for _, m := range resp.Metadatas {
+		k.BaseKeeper.SetDenomMetaData(ctx, m)
+	}
+	return k.BaseKeeper.GetAllDenomMetaData(ctx)
 }

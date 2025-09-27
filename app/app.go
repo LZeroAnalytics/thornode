@@ -335,6 +335,9 @@ func NewChainApp(
 		if err != nil {
 			panic(err)
 		}
+		sdkCtx := app.BaseApp.NewUncachedContext(true, tmproto.Header{})
+		fbk.EnsureDenomMetadata(sdk.WrapSDKContext(sdkCtx))
+
 		app.BankKeeper = fbk
 	}
 
