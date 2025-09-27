@@ -311,7 +311,11 @@ func NewChainApp(
 	)
 	var bankStoreSvc corestore.KVStoreService
 	if cast.ToBool(appOpts.Get("fork.enabled")) {
-		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]))
+		endpoint := cast.ToString(appOpts.Get("fork.grpc"))
+		if endpoint == "" {
+			endpoint = "grpc.thor.pfc.zone:443"
+		}
+		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]), endpoint)
 	} else {
 		bankStoreSvc = runtime.NewKVStoreService(keys[banktypes.StoreKey])
 	}
@@ -335,8 +339,8 @@ func NewChainApp(
 		if err != nil {
 			panic(err)
 		}
-		sdkCtx := app.BaseApp.NewUncachedContext(true, tmproto.Header{})
-		fbk.EnsureDenomMetadata(sdk.WrapSDKContext(sdkCtx))
+		sdkCtx := app.BaseApp.NewUncachedContext(false, tmproto.Header{})
+		fbk.EnsureDenomMetadata(sdkCtx)
 
 		app.BankKeeper = fbk
 	}
