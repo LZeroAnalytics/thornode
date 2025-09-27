@@ -68,6 +68,7 @@ import (
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 
 	forkbankkeeper "gitlab.com/thorchain/thornode/v3/x/bloctopus/forkbank/keeper"
+	forking "gitlab.com/thorchain/thornode/v3/x/bloctopus/forking"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -307,7 +308,7 @@ func NewChainApp(
 		app.MsgServiceRouter(),
 		app.AccountKeeper,
 	)
-	var bankStoreSvc runtime.KVStoreService
+	var bankStoreSvc storetypes.KVStoreService
 	if cast.ToBool(appOpts.Get("fork.enabled")) {
 		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]))
 	} else {
