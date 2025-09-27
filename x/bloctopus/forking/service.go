@@ -3,7 +3,7 @@ package forking
 import (
 	"context"
 
-	storetypes "cosmossdk.io/store/types"
+	storetypes "cosmossdk.io/core/store"
 )
 
 type forkingKVStoreService struct {
