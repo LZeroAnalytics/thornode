@@ -65,7 +65,7 @@ func (c *RemoteClient) RemoteDenomsMetadata(ctx context.Context) (*banktypes.Que
 	if err := c.ensureConn(); err != nil {
 		return nil, err
 	}
-	var all []*banktypes.Metadata
+	var all []banktypes.Metadata
 	var nextKey []byte
 	for {
 		req := &banktypes.QueryDenomsMetadataRequest{
