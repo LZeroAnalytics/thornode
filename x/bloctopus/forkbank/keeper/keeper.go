@@ -76,6 +76,41 @@ func (k ForkingBankKeeper) ensureDenomMetadata(ctx context.Context) {
 func (k ForkingBankKeeper) EnsureDenomMetadata(ctx context.Context) {
 	k.ensureDenomMetadata(ctx)
 }
+func (k ForkingBankKeeper) DenomsMetadata(c context.Context, req *banktypes.QueryDenomsMetadataRequest) (*banktypes.QueryDenomsMetadataResponse, error) {
+	if req == nil {
+		return &banktypes.QueryDenomsMetadataResponse{Metadatas: nil}, nil
+	}
+	local := k.BaseKeeper.GetAllDenomMetaData(c)
+	if len(local) > 0 {
+		return &banktypes.QueryDenomsMetadataResponse{Metadatas: local}, nil
+	}
+	resp, err := k.client.RemoteDenomsMetadata(c)
+	if err != nil || resp == nil {
+		return &banktypes.QueryDenomsMetadataResponse{Metadatas: nil}, nil
+	}
+	return resp, nil
+}
+
+func (k ForkingBankKeeper) DenomMetadata(c context.Context, req *banktypes.QueryDenomMetadataRequest) (*banktypes.QueryDenomMetadataResponse, error) {
+	if req == nil {
+		return &banktypes.QueryDenomMetadataResponse{}, nil
+	}
+	md, found := k.BaseKeeper.GetDenomMetaData(c, req.Denom)
+	if found {
+		return &banktypes.QueryDenomMetadataResponse{Metadata: md}, nil
+	}
+	resp, err := k.client.RemoteDenomsMetadata(c)
+	if err != nil || resp == nil {
+		return &banktypes.QueryDenomMetadataResponse{}, nil
+	}
+	for _, m := range resp.Metadatas {
+		if m.Base == req.Denom || m.Display == req.Denom || m.Name == req.Denom || m.Description == req.Denom {
+			return &banktypes.QueryDenomMetadataResponse{Metadata: m}, nil
+		}
+	}
+	return &banktypes.QueryDenomMetadataResponse{}, nil
+}
+
 
 
 
