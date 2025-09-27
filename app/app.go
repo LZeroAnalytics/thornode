@@ -82,7 +82,7 @@ import (
 	"gitlab.com/thorchain/thornode/v3/openapi"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/ebifrost"
-	"gitlab.com/thorchain/thornode/v3/x/thorchain/forking"
+	"gitlab.com/thorchain/thornode/v3/x/bloctopus/forking"
 	thorchainkeeper "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	thorchainkeeperabci "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/abci"
 	thorchainkeeperv1 "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/v1"
