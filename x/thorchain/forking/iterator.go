@@ -1,11 +1,6 @@
+//go:build bloctopus_forking_moved
+
 package forking
-
-import (
-	"bytes"
-	"fmt"
-
-	storetypes "cosmossdk.io/core/store"
-)
 
 type MergedIterator struct {
 	local   storetypes.Iterator

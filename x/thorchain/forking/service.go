@@ -1,12 +1,6 @@
+//go:build bloctopus_forking_moved
+
 package forking
-
-import (
-	"context"
-	"sync"
-
-	storetypes "cosmossdk.io/core/store"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-)
 
 type forkingKVStoreService struct {
 	parent       storetypes.KVStoreService

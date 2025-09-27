@@ -1,11 +1,6 @@
+//go:build bloctopus_forking_moved
+
 package forking
-
-import (
-	"sync"
-	"time"
-
-	lru "github.com/hashicorp/golang-lru/v2"
-)
 
 type CacheEntry struct {
 	Value     []byte
