@@ -18,6 +18,7 @@ import (
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/log"
+	corestore "cosmossdk.io/core/store"
 	storetypes "cosmossdk.io/store/types"
 	"cosmossdk.io/x/upgrade"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
@@ -308,7 +309,7 @@ func NewChainApp(
 		app.MsgServiceRouter(),
 		app.AccountKeeper,
 	)
-	var bankStoreSvc storetypes.KVStoreService
+	var bankStoreSvc corestore.KVStoreService
 	if cast.ToBool(appOpts.Get("fork.enabled")) {
 		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]))
 	} else {
