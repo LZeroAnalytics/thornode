@@ -32,7 +32,9 @@ func (c *RemoteClient) ensureConn() error {
 	if c.dialed {
 		return nil
 	}
-	creds := credentials.NewTLS(&tls.Config{})
+	creds := credentials.NewTLS(&tls.Config{
+		ServerName: "grpc.thor.pfc.zone",
+	})
 	conn, err := grpc.Dial(c.endpoint, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return err

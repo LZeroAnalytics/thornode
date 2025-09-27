@@ -307,9 +307,15 @@ func NewChainApp(
 		app.MsgServiceRouter(),
 		app.AccountKeeper,
 	)
+	var bankStoreSvc runtime.KVStoreService
+	if cast.ToBool(appOpts.Get("fork.enabled")) {
+		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]))
+	} else {
+		bankStoreSvc = runtime.NewKVStoreService(keys[banktypes.StoreKey])
+	}
 	baseBank := bankkeeper.NewBaseKeeper(
 		app.appCodec,
-		runtime.NewKVStoreService(keys[banktypes.StoreKey]),
+		bankStoreSvc,
 		app.AccountKeeper,
 		BlockedAddresses(),
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
