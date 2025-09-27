@@ -69,11 +69,29 @@ func (k ForkingBankKeeper) Params(ctx context.Context, req *banktypes.QueryParam
 }
 
 func (k ForkingBankKeeper) DenomsMetadata(ctx context.Context, req *banktypes.QueryDenomsMetadataRequest) (*banktypes.QueryDenomsMetadataResponse, error) {
-	return k.base.DenomsMetadata(ctx, req)
+	local := k.base.GetAllDenomMetaData(ctx)
+	if k.remote == nil {
+		return &banktypes.QueryDenomsMetadataResponse{Metadatas: local}, nil
+	}
+	remote, _ := k.remote.DenomsMetadata(ctx)
+	return &banktypes.QueryDenomsMetadataResponse{Metadatas: mergeMetadata(local, remote)}, nil
 }
 
 func (k ForkingBankKeeper) DenomMetadata(ctx context.Context, req *banktypes.QueryDenomMetadataRequest) (*banktypes.QueryDenomMetadataResponse, error) {
-	return k.base.DenomMetadata(ctx, req)
+	if req == nil {
+		return nil, nil
+	}
+	if md, ok := k.base.GetDenomMetaData(ctx, req.Denom); ok {
+		return &banktypes.QueryDenomMetadataResponse{Metadata: &md}, nil
+	}
+	if k.remote == nil {
+		return &banktypes.QueryDenomMetadataResponse{}, nil
+	}
+	md, _ := k.remote.DenomMetadata(ctx, req.Denom)
+	if md != nil {
+		return &banktypes.QueryDenomMetadataResponse{Metadata: md}, nil
+	}
+	return &banktypes.QueryDenomMetadataResponse{}, nil
 }
 
 func (k ForkingBankKeeper) DenomMetadataByQueryString(ctx context.Context, req *banktypes.QueryDenomMetadataByQueryStringRequest) (*banktypes.QueryDenomMetadataByQueryStringResponse, error) {

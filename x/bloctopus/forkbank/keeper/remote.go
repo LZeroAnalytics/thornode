@@ -41,6 +41,26 @@ func (r *remoteClient) AllBalances(ctx context.Context, addr string) (sdk.Coins,
 	return resp.Balances, nil
 }
 
+func (r *remoteClient) DenomsMetadata(ctx context.Context) ([]banktypes.Metadata, error) {
+	cctx, cancel := context.WithTimeout(ctx, r.to)
+	defer cancel()
+	resp, err := r.qBank.DenomsMetadata(cctx, &banktypes.QueryDenomsMetadataRequest{})
+	if err != nil {
+		return nil, nil
+	}
+	return resp.Metadatas, nil
+}
+
+func (r *remoteClient) DenomMetadata(ctx context.Context, denom string) (*banktypes.Metadata, error) {
+	cctx, cancel := context.WithTimeout(ctx, r.to)
+	defer cancel()
+	resp, err := r.qBank.DenomMetadata(cctx, &banktypes.QueryDenomMetadataRequest{Denom: denom})
+	if err != nil || resp.Metadata == nil {
+		return nil, nil
+	}
+	return resp.Metadata, nil
+}
+
 func (r *remoteClient) Close() error {
 	if r.conn != nil {
 		return r.conn.Close()
