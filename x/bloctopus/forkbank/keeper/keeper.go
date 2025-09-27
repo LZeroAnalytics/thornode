@@ -82,13 +82,13 @@ func (k ForkingBankKeeper) DenomMetadata(ctx context.Context, req *banktypes.Que
 		return nil, nil
 	}
 	if md, ok := k.base.GetDenomMetaData(ctx, req.Denom); ok {
-		return &banktypes.QueryDenomMetadataResponse{Metadata: &md}, nil
+		return &banktypes.QueryDenomMetadataResponse{Metadata: md}, nil
 	}
 	if k.remote == nil {
 		return &banktypes.QueryDenomMetadataResponse{}, nil
 	}
-	md, _ := k.remote.DenomMetadata(ctx, req.Denom)
-	if md != nil {
+	md, ok := k.remote.DenomMetadata(ctx, req.Denom)
+	if ok {
 		return &banktypes.QueryDenomMetadataResponse{Metadata: md}, nil
 	}
 	return &banktypes.QueryDenomMetadataResponse{}, nil

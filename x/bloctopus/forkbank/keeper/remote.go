@@ -51,14 +51,14 @@ func (r *remoteClient) DenomsMetadata(ctx context.Context) ([]banktypes.Metadata
 	return resp.Metadatas, nil
 }
 
-func (r *remoteClient) DenomMetadata(ctx context.Context, denom string) (*banktypes.Metadata, error) {
+func (r *remoteClient) DenomMetadata(ctx context.Context, denom string) (banktypes.Metadata, bool) {
 	cctx, cancel := context.WithTimeout(ctx, r.to)
 	defer cancel()
 	resp, err := r.qBank.DenomMetadata(cctx, &banktypes.QueryDenomMetadataRequest{Denom: denom})
-	if err != nil || resp.Metadata == nil {
-		return nil, nil
+	if err != nil {
+		return banktypes.Metadata{}, false
 	}
-	return resp.Metadata, nil
+	return resp.Metadata, true
 }
 
 func (r *remoteClient) Close() error {
