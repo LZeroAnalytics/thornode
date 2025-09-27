@@ -338,7 +338,7 @@ func NewChainApp(
 		sdkCtx := app.BaseApp.NewUncachedContext(false, tmproto.Header{})
 		fbk.EnsureDenomMetadata(sdkCtx)
 
-		app.BankKeeper = fbk
+		app.BankKeeper = &fbk
 	}
 
 	txSigningOptions, err := tx.NewDefaultSigningOptions()

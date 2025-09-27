@@ -21,7 +21,7 @@ func NewForkingBankKeeper(base bankkeeper.BaseKeeper, cfg Config) (ForkingBankKe
 	}, nil
 }
 
-func (k ForkingBankKeeper) GetAllBalances(ctx context.Context, addr sdk.AccAddress) sdk.Coins {
+func (k *ForkingBankKeeper) GetAllBalances(ctx context.Context, addr sdk.AccAddress) sdk.Coins {
 	if k.BaseKeeper.HasBalance(ctx, addr, sdk.NewCoin("rune", math.NewInt(1))) {
 		return k.BaseKeeper.GetAllBalances(ctx, addr)
 	}
@@ -32,7 +32,7 @@ func (k ForkingBankKeeper) GetAllBalances(ctx context.Context, addr sdk.AccAddre
 	return sdk.NewCoins(resp.Balances...)
 }
 
-func (k ForkingBankKeeper) GetBalance(ctx context.Context, addr sdk.AccAddress, denom string) sdk.Coin {
+func (k *ForkingBankKeeper) GetBalance(ctx context.Context, addr sdk.AccAddress, denom string) sdk.Coin {
 	if k.BaseKeeper.HasBalance(ctx, addr, sdk.NewCoin(denom, math.NewInt(1))) {
 		return k.BaseKeeper.GetBalance(ctx, addr, denom)
 	}
@@ -48,11 +48,11 @@ func (k ForkingBankKeeper) GetBalance(ctx context.Context, addr sdk.AccAddress, 
 	return sdk.NewCoin(denom, math.ZeroInt())
 }
 
-func (k ForkingBankKeeper) SendCoins(ctx context.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) error {
+func (k *ForkingBankKeeper) SendCoins(ctx context.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) error {
 	return k.BaseKeeper.SendCoins(ctx, fromAddr, toAddr, amt)
 }
 
-func (k ForkingBankKeeper) GetDenomMetaData(ctx context.Context, denom string) (banktypes.Metadata, bool) {
+func (k *ForkingBankKeeper) GetDenomMetaData(ctx context.Context, denom string) (banktypes.Metadata, bool) {
 	md, found := k.BaseKeeper.GetDenomMetaData(ctx, denom)
 	if found {
 		return md, true
@@ -60,7 +60,7 @@ func (k ForkingBankKeeper) GetDenomMetaData(ctx context.Context, denom string) (
 	k.ensureDenomMetadata(ctx)
 	return k.BaseKeeper.GetDenomMetaData(ctx, denom)
 }
-func (k ForkingBankKeeper) ensureDenomMetadata(ctx context.Context) {
+func (k *ForkingBankKeeper) ensureDenomMetadata(ctx context.Context) {
 	all := k.BaseKeeper.GetAllDenomMetaData(ctx)
 	if len(all) > 0 {
 		return
@@ -73,10 +73,10 @@ func (k ForkingBankKeeper) ensureDenomMetadata(ctx context.Context) {
 		k.BaseKeeper.SetDenomMetaData(ctx, m)
 	}
 }
-func (k ForkingBankKeeper) EnsureDenomMetadata(ctx context.Context) {
+func (k *ForkingBankKeeper) EnsureDenomMetadata(ctx context.Context) {
 	k.ensureDenomMetadata(ctx)
 }
-func (k ForkingBankKeeper) DenomsMetadata(c context.Context, req *banktypes.QueryDenomsMetadataRequest) (*banktypes.QueryDenomsMetadataResponse, error) {
+func (k *ForkingBankKeeper) DenomsMetadata(c context.Context, req *banktypes.QueryDenomsMetadataRequest) (*banktypes.QueryDenomsMetadataResponse, error) {
 	if req == nil {
 		return &banktypes.QueryDenomsMetadataResponse{Metadatas: nil}, nil
 	}
@@ -91,7 +91,7 @@ func (k ForkingBankKeeper) DenomsMetadata(c context.Context, req *banktypes.Quer
 	return resp, nil
 }
 
-func (k ForkingBankKeeper) DenomMetadata(c context.Context, req *banktypes.QueryDenomMetadataRequest) (*banktypes.QueryDenomMetadataResponse, error) {
+func (k *ForkingBankKeeper) DenomMetadata(c context.Context, req *banktypes.QueryDenomMetadataRequest) (*banktypes.QueryDenomMetadataResponse, error) {
 	if req == nil {
 		return &banktypes.QueryDenomMetadataResponse{}, nil
 	}
@@ -114,7 +114,7 @@ func (k ForkingBankKeeper) DenomMetadata(c context.Context, req *banktypes.Query
 
 
 
-func (k ForkingBankKeeper) GetAllDenomMetaData(ctx context.Context) []banktypes.Metadata {
+func (k *ForkingBankKeeper) GetAllDenomMetaData(ctx context.Context) []banktypes.Metadata {
 	all := k.BaseKeeper.GetAllDenomMetaData(ctx)
 	if len(all) > 0 {
 		return all
