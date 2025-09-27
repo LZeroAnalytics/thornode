@@ -1,6 +1,6 @@
 package forking
 
-import storetypes "cosmossdk.io/store/types"
+import storetypes "cosmossdk.io/core/store"
 
 type MergedIterator struct {
 	local storetypes.Iterator
