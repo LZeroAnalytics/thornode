@@ -1,15 +1,19 @@
 package forking
 
-import storetypes "cosmossdk.io/core/store"
+import (
+	"context"
+
+	store "cosmossdk.io/store/types"
+)
 
 type forkingKVStoreService struct {
-	parent storetypes.KVStoreService
+	parent store.KVStoreService
 }
 
-func NewKVStoreService(parent storetypes.KVStoreService) storetypes.KVStoreService {
+func NewKVStoreService(parent store.KVStoreService) store.KVStoreService {
 	return &forkingKVStoreService{parent: parent}
 }
 
-func (s *forkingKVStoreService) OpenStore(ctx storetypes.Context) storetypes.KVStore {
-	return s.parent.OpenStore(ctx)
+func (s *forkingKVStoreService) OpenKVStore(ctx context.Context) store.KVStore {
+	return s.parent.OpenKVStore(ctx)
 }
