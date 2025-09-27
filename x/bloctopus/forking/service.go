@@ -7,15 +7,13 @@ import (
 )
 
 type forkingKVStoreService struct {
-	parent   storetypes.KVStoreService
-	endpoint string
+	parent storetypes.KVStoreService
 }
 
-func NewKVStoreService(parent storetypes.KVStoreService, endpoint string) storetypes.KVStoreService {
-	return &forkingKVStoreService{parent: parent, endpoint: endpoint}
+func NewKVStoreService(parent storetypes.KVStoreService) storetypes.KVStoreService {
+	return &forkingKVStoreService{parent: parent}
 }
 
 func (s *forkingKVStoreService) OpenKVStore(ctx context.Context) storetypes.KVStore {
-	under := s.parent.OpenKVStore(ctx)
-	return NewKVStore(ctx, under, s.endpoint)
+	return s.parent.OpenKVStore(ctx)
 }

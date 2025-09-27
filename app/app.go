@@ -311,11 +311,7 @@ func NewChainApp(
 	)
 	var bankStoreSvc corestore.KVStoreService
 	if cast.ToBool(appOpts.Get("fork.enabled")) {
-		endpoint := cast.ToString(appOpts.Get("fork.grpc"))
-		if endpoint == "" {
-			endpoint = "grpc.thor.pfc.zone:443"
-		}
-		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]), endpoint)
+		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]))
 	} else {
 		bankStoreSvc = runtime.NewKVStoreService(keys[banktypes.StoreKey])
 	}

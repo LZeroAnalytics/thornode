@@ -8,15 +8,14 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"github.com/cosmos/cosmos-sdk/types/query"
 )
 
 type RemoteClient struct {
-	conn        *grpc.ClientConn
-	bankQuery   banktypes.QueryClient
-	denomQuery  banktypes.QueryClient
-	endpoint    string
-	dialed      bool
-	tlsInsecure bool
+	conn      *grpc.ClientConn
+	bankQuery banktypes.QueryClient
+	endpoint  string
+	dialed    bool
 }
 
 func NewRemoteClient(endpoint string) (*RemoteClient, error) {
@@ -66,9 +65,25 @@ func (c *RemoteClient) RemoteDenomsMetadata(ctx context.Context) (*banktypes.Que
 	if err := c.ensureConn(); err != nil {
 		return nil, err
 	}
-	resp, err := c.bankQuery.DenomsMetadata(ctx, &banktypes.QueryDenomsMetadataRequest{})
-	if err != nil {
-		return nil, err
+	var all []*banktypes.Metadata
+	var nextKey []byte
+	for {
+		req := &banktypes.QueryDenomsMetadataRequest{
+			Pagination: &query.PageRequest{
+				Key:        nextKey,
+				Limit:      500,
+				CountTotal: false,
+			},
+		}
+		resp, err := c.bankQuery.DenomsMetadata(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, resp.Metadatas...)
+		if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
+			break
+		}
+		nextKey = resp.Pagination.NextKey
 	}
-	return resp, nil
+	return &banktypes.QueryDenomsMetadataResponse{Metadatas: all}, nil
 }
