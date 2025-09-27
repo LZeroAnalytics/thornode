@@ -315,13 +315,20 @@ func NewChainApp(
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		logger,
 	)
-	fbk, err := forkbankkeeper.NewForkingBankKeeper(baseBank, forkbankkeeper.Config{
-		Endpoint: "grpc.thor.pfc.zone:443",
-	})
-	if err != nil {
-		panic(err)
+	app.BankKeeper = baseBank
+	if cast.ToBool(appOpts.Get("fork.enabled")) {
+		endpoint := cast.ToString(appOpts.Get("fork.grpc"))
+		if endpoint == "" {
+			endpoint = "grpc.thor.pfc.zone:443"
+		}
+		fbk, err := forkbankkeeper.NewForkingBankKeeper(baseBank, forkbankkeeper.Config{
+			Endpoint: endpoint,
+		})
+		if err != nil {
+			panic(err)
+		}
+		app.BankKeeper = fbk
 	}
-	app.BankKeeper = fbk
 
 	txSigningOptions, err := tx.NewDefaultSigningOptions()
 	if err != nil {

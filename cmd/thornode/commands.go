@@ -154,13 +154,10 @@ func addModuleInitFlags(startCmd *cobra.Command) {
 	startCmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
 		serverCtx := server.GetServerContextFromCmd(cmd)
 
-		// Bind flags to the Context's Viper so the app construction can set
-		// options accordingly.
 		if err := serverCtx.Viper.BindPFlags(cmd.Flags()); err != nil {
 			return fmt.Errorf("fail to bind flags,err: %w", err)
 		}
 
-		// replace sdk logger with thorlog
 		if zl, ok := serverCtx.Logger.Impl().(*zerolog.Logger); ok {
 			logger := zl.With().CallerWithSkipFrameCount(3).Logger()
 			serverCtx.Logger = thorlog.SdkLogWrapper{
@@ -172,6 +169,19 @@ func addModuleInitFlags(startCmd *cobra.Command) {
 	}
 	wasm.AddModuleInitFlags(startCmd)
 	ebifrost.AddModuleInitFlags(startCmd)
+
+	startCmd.Flags().Bool("fork.enabled", false, "Enable forking mode")
+	startCmd.Flags().String("fork.grpc", "", "Forking remote gRPC endpoint (e.g. grpc.thor.pfc.zone:443)")
+	startCmd.Flags().String("fork.chain_id", "", "Forking remote chain-id")
+	startCmd.Flags().String("fork.chain-id", "", "Forking remote chain-id (alias)")
+	startCmd.Flags().Uint64("fork.height", 0, "Forking remote reference height (ignored; latest only)")
+	startCmd.Flags().Bool("fork.cache_enabled", true, "Enable in-memory cache for forking client")
+	startCmd.Flags().Bool("fork.cache-enabled", true, "Enable in-memory cache for forking client (alias)")
+	startCmd.Flags().Uint64("fork.cache_size", 10000, "Cache size for forking client")
+	startCmd.Flags().Uint64("fork.cache-size", 10000, "Cache size for forking client (alias)")
+	startCmd.Flags().String("fork.timeout", "60s", "Timeout for forking client requests")
+	startCmd.Flags().Uint64("fork.gas_cost_per_fetch", 0, "Gas cost per remote fetch in forking mode")
+	startCmd.Flags().Uint64("fork.gas-cost-per-fetch", 0, "Gas cost per remote fetch in forking mode (alias)")
 }
 
 func renderConfigCommand() *cobra.Command {
