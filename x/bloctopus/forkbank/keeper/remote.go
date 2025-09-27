@@ -7,7 +7,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 type remoteClient struct {
@@ -18,7 +18,7 @@ type remoteClient struct {
 
 func newRemoteClient(cfg Config) (*remoteClient, error) {
 	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, "")),
 	}
 	cc, err := grpc.Dial(cfg.GRPCEndpoint, dialOpts...)
 	if err != nil {
