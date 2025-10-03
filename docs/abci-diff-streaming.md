@@ -30,7 +30,8 @@ docker run --rm -it --name thornode \
   tiljordan/thornode-forking:local start
 
 Output format
-/root/.thornode/diffs/{height}.json
+- One file per block height, named exactly as the block height:
+  /root/.thornode/diffs/{blockHeight}.json
 {
   "base_height": 23010393,
   "height": 23010394,
