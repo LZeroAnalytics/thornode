@@ -18,6 +18,7 @@ ARG TAG=mainnet
 ARG COMMIT=unknown
 
 RUN make install
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go/bin/diff-writer ./cmd/diff-writer || true
 
 ########################################################################################
 # Deploy
@@ -42,6 +43,7 @@ RUN apt-get update && \
 # Copy the compiled binaries over.
 COPY --from=build /go/bin/thornode /go/bin/bifrost /go/bin/recover-keyshare-backup /usr/bin/
 COPY --from=build /go/pkg/mod/github.com/!cosm!wasm/wasmvm/v2@v2.1.2/internal/api/libwasmvm.*.so /usr/lib
+COPY --from=build /go/bin/diff-writer /usr/local/bin/diff-writer
 
 COPY build/scripts /scripts
 
