@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,11 +35,10 @@ type kvWrite struct {
 }
 
 type diffFile struct {
-	BaseHeight   int64     `json:"base_height"`
-	Height       int64     `json:"height"`
-	Time         string    `json:"time"`
-	AppHashAfter string    `json:"app_hash_after,omitempty"`
-	StoreWrites  []kvWrite `json:"store_writes"`
+	BaseHeight  int64     `json:"base_height"`
+	Height      int64     `json:"height"`
+	Time        string    `json:"time"`
+	StoreWrites []kvWrite `json:"store_writes"`
 }
 
 func (p *filePlugin) ListenFinalizeBlock(ctx context.Context, req abcitypes.RequestFinalizeBlock, res abcitypes.ResponseFinalizeBlock) error {
@@ -53,11 +51,10 @@ func (p *filePlugin) ListenCommit(ctx context.Context, res abcitypes.ResponseCom
 		height = time.Now().UnixNano()
 	}
 	df := diffFile{
-		BaseHeight:   p.baseHeight,
-		Height:       height,
-		Time:         time.Now().UTC().Format(time.RFC3339Nano),
-		AppHashAfter: fmt.Sprintf("%X", res.Data),
-		StoreWrites:  make([]kvWrite, 0, len(changeSet)),
+		BaseHeight:  p.baseHeight,
+		Height:      height,
+		Time:        time.Now().UTC().Format(time.RFC3339Nano),
+		StoreWrites: make([]kvWrite, 0, len(changeSet)),
 	}
 	for _, ch := range changeSet {
 		op := "set"
