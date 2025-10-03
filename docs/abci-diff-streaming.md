@@ -5,14 +5,15 @@ How to enable
 [streaming]
 [streaming.abci]
 keys = ["*"]
-plugin = "abci_v1"
+plugin = "abci"
 stop-node-on-err = false
+- Note: The plugin also accepts plugin = "abci_v1" if preferred.
 
 Runtime env
-- COSMOS_SDK_ABCI=/usr/local/bin/diff-writer
+- export COSMOS_SDK_ABCI=/usr/local/bin/diff-writer
 - Optional:
-  - THOR_DIFF_OUT=/root/.thornode/diffs
-  - THOR_DIFF_BASE_HEIGHT=23010393
+  - export THOR_DIFF_OUT=/root/.thornode/diffs
+  - export THOR_DIFF_BASE_HEIGHT=23010393
 
 Docker build (local)
 - From repo root:
@@ -29,7 +30,8 @@ docker run --rm -it --name thornode \
   tiljordan/thornode-forking:local start
 
 Output format
-/root/.thornode/diffs/{height}.json
+- One file per block height, named exactly as the block height:
+  /root/.thornode/diffs/{blockHeight}.json
 {
   "base_height": 23010393,
   "height": 23010394,
@@ -46,3 +48,10 @@ Verification
 - curl http://localhost:1317/cosmos/bank/v1beta1/balances/{address}
 - curl http://localhost:1317/thorchain/pools
 - ls /thornode/diffs | tail
+
+Troubleshooting
+- If you see "failed to load streaming plugin" and notes show "Path: /usr/bin/sh":
+  - Ensure COSMOS_SDK_ABCI points to the actual ELF binary (no quotes/args), e.g. /usr/local/bin/diff-writer
+  - Ensure it's executable: chmod +x /usr/local/bin/diff-writer
+  - The plugin is built for linux/amd64; CGO_ENABLED=0 recommended (static)
+  - Try plugin = "abci" in app.toml (the plugin also accepts "abci_v1")
