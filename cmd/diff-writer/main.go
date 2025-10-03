@@ -25,6 +25,7 @@ const (
 type filePlugin struct {
 	outDir     string
 	baseHeight int64
+	lastHeight int64
 }
 
 type kvWrite struct {
@@ -42,11 +43,15 @@ type diffFile struct {
 }
 
 func (p *filePlugin) ListenFinalizeBlock(ctx context.Context, req abcitypes.RequestFinalizeBlock, res abcitypes.ResponseFinalizeBlock) error {
+	p.lastHeight = req.Height
 	return nil
 }
 
 func (p *filePlugin) ListenCommit(ctx context.Context, res abcitypes.ResponseCommit, changeSet []*storetypes.StoreKVPair) error {
-	height := res.RetainHeight
+	height := p.lastHeight
+	if height == 0 {
+		height = res.RetainHeight
+	}
 	if height == 0 {
 		height = time.Now().UnixNano()
 	}
@@ -103,7 +108,8 @@ func main() {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: abci.Handshake,
 		Plugins: map[string]plugin.Plugin{
-			"abci": &abci.ListenerGRPCPlugin{Impl: impl},
+			"abci":    &abci.ListenerGRPCPlugin{Impl: impl},
+			"abci_v1": &abci.ListenerGRPCPlugin{Impl: impl},
 		},
 		GRPCServer: plugin.DefaultGRPCServer,
 	})
