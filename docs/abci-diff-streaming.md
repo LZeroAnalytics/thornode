@@ -43,6 +43,13 @@ Output format
   ]
 }
 
+Consume diffs via API
+- A minimal diff-API server is provided as a separate binary under cmd/diff-api.
+- See docs/diff-api.md for build/run and endpoints to request:
+  - Per-block diffs: GET /diffs/height/{H}
+  - Cumulative diffs since base: GET /diffs/since/{H}
+- Enable gzip and checkpoints for efficient queries and smaller payloads.
+
 Verification
 - curl http://localhost:27147/status
 - curl http://localhost:1317/cosmos/bank/v1beta1/balances/{address}
