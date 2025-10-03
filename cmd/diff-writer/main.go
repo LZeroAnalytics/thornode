@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	abcitypes "github.com/cometbft/cometbft/abci/types"
-	storetypes "cosmossdk.io/store/types"
 	"cosmossdk.io/store/streaming/abci"
+	storetypes "cosmossdk.io/store/types"
+	abcitypes "github.com/cometbft/cometbft/abci/types"
 	"github.com/hashicorp/go-plugin"
 )
 
