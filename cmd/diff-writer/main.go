@@ -103,7 +103,7 @@ func main() {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: abci.Handshake,
 		Plugins: map[string]plugin.Plugin{
-			"abci": &abci.ABCIListenerGRPCPlugin{Impl: impl},
+			"abci": &abci.ListenerGRPCPlugin{Impl: impl},
 		},
 		GRPCServer: plugin.DefaultGRPCServer,
 	})
