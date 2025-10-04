@@ -163,14 +163,12 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			if len(kb) < 1+32 {
 				break
 			}
-			addr, ok := parseAddrFromKey(kb, 1)
-			if !ok || addr == "" {
+			addrB := kb[1:33]
+			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
+			if err != nil || addr == "" {
 				break
 			}
-			suffix := kb[len(kb)- (len(kb)-(1+32)) : ]
-			if len(kb) >= 1+32 {
-				suffix = kb[1+32:]
-			}
+			suffix := kb[33:]
 			if bytes.Equal(suffix, []byte("contract_info")) {
 				ci := new(wasmtypes.ContractInfo)
 				var mm map[string]any
@@ -287,7 +285,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				}
 			}
 
-		case 0x04:
+		case 0x04, 0x0a:
 			if len(kb) >= 2 {
 				if id, ok := parseCodeID(kb[1:]); ok {
 					agg := codesByID[id]
