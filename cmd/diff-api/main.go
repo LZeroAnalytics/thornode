@@ -277,7 +277,7 @@ func handleDiffSince(outDir string, base int64) http.HandlerFunc {
 			return
 		}
 		h, err := parseHeightParam(parts[2])
-			if err != nil {
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -435,7 +435,7 @@ func buildCheckpoints(outDir string, base int64) {
 
 func main() {
 	outDir := envStr("THOR_DIFF_OUT", "/root/.thornode/diffs")
-	baseStr := envStr("THOR_DIFF_BASE_HEIGHT", "")
+	baseStr := envStr("THOR_DIFF_BASE_HEIGHT", "23010003")
 	var base int64
 	if baseStr != "" {
 		if v, err := strconv.ParseInt(baseStr, 10, 64); err == nil {
