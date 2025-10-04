@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"unicode/utf8"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -39,58 +40,40 @@ func isPrintableUTF8(b []byte) bool {
 func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	const storeKey = wasmtypes.StoreKey
 
-	codes := make([]map[string]any, 0)
-	contracts := make([]map[string]any, 0)
-	sequences := make(map[string]any)
-	contractStates := make(map[string][]map[string]any)
+	type codeAgg struct {
+		info  map[string]any
+		bytes string
+		pin   bool
+	}
+	codesByID := make(map[uint64]*codeAgg)
 
+	type contractAgg struct {
+		info    map[string]any
+		state   []map[string]any
+		history []map[string]any
+	}
+	contractsByAddr := make(map[string]*contractAgg)
+
+	sequences := make(map[string]any)
 	paramsOut := make(map[string]any)
+
 	changed := false
 
 	for _, w := range ws {
-		if w.Store != storeKey {
-			continue
-		}
-		if w.Op == "delete" || w.Value == "" {
-			continue
-		}
-
-		if w.Key == "08" {
-			vb, err := base64.StdEncoding.DecodeString(w.Value)
-			if err == nil && len(vb) > 0 {
-				if x, ok := tryUvarint(vb); ok {
-					sequences["last_code_id"] = x
-					changed = true
-					continue
-				}
-			}
+		if w.Store != storeKey || w.Op == "delete" || w.Value == "" {
 			continue
 		}
 
 		vb, err := base64.StdEncoding.DecodeString(w.Value)
-		if err != nil || len(vb) == 0 {
+		if err != nil {
 			continue
 		}
 
-		if ci := new(wasmtypes.CodeInfo); appCodec.Unmarshal(vb, ci) == nil {
-			if jb, err := appCodec.MarshalJSON(ci); err == nil {
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil && len(mm) > 0 {
-					codes = append(codes, mm)
-					changed = true
-					continue
-				}
-			}
-		}
-
-		if cti := new(wasmtypes.ContractInfo); appCodec.Unmarshal(vb, cti) == nil {
-			if jb, err := appCodec.MarshalJSON(cti); err == nil {
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil && len(mm) > 0 {
-					contracts = append(contracts, mm)
-					changed = true
-					continue
-				}
+		if w.Key == "08" {
+			if x, ok := tryUvarint(vb); ok {
+				sequences["last_code_id"] = x
+				changed = true
+				continue
 			}
 		}
 
@@ -108,34 +91,136 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 		}
 
 		kb, err := hex.DecodeString(w.Key)
-		if err != nil || len(kb) < 2 {
+		if err != nil || len(kb) == 0 {
 			continue
 		}
-		if kb[0] == 0x06 {
-			addrLen := int(kb[1])
-			if addrLen > 0 && len(kb) >= 2+addrLen {
-				addrB := kb[2 : 2+addrLen]
-				addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
-				if err != nil || addr == "" {
-					continue
+		prefix := kb[0]
+
+		switch prefix {
+		case 0x02:
+			addrLen := 0
+			if len(kb) >= 2 {
+				addrLen = int(kb[1])
+			}
+			if addrLen <= 0 || len(kb) < 2+addrLen {
+				break
+			}
+			addrB := kb[2 : 2+addrLen]
+			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
+			if err != nil || addr == "" {
+				break
+			}
+			ci := new(wasmtypes.ContractInfo)
+			if appCodec.Unmarshal(vb, ci) != nil {
+				break
+			}
+			if jb, err := appCodec.MarshalJSON(ci); err == nil {
+				var mm map[string]any
+				if json.Unmarshal(jb, &mm) == nil {
+					agg := contractsByAddr[addr]
+					if agg == nil {
+						agg = &contractAgg{}
+						contractsByAddr[addr] = agg
+					}
+					agg.info = mm
+					changed = true
 				}
-				valAny := any(hex.EncodeToString(vb))
-				if len(vb) <= 10 {
-					if n, ok := tryUvarint(vb); ok {
-						valAny = n
+			}
+
+		case 0x06:
+			if len(kb) < 3 {
+				break
+			}
+			addrLen := int(kb[1])
+			if addrLen <= 0 || len(kb) < 2+addrLen {
+				break
+			}
+			addrB := kb[2 : 2+addrLen]
+			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
+			if err != nil || addr == "" {
+				break
+			}
+			keyHex := hex.EncodeToString(kb[2+addrLen:])
+			agg := contractsByAddr[addr]
+			if agg == nil {
+				agg = &contractAgg{}
+				contractsByAddr[addr] = agg
+			}
+			agg.state = append(agg.state, map[string]any{
+				"key":   keyHex,
+				"value": w.Value,
+			})
+			changed = true
+
+		case 0x07:
+			if len(kb) < 3 {
+				break
+			}
+			addrLen := int(kb[1])
+			if addrLen <= 0 || len(kb) < 2+addrLen {
+				break
+			}
+			addrB := kb[2 : 2+addrLen]
+			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
+			if err != nil || addr == "" {
+				break
+			}
+			h := new(wasmtypes.ContractCodeHistoryEntry)
+			if appCodec.Unmarshal(vb, h) != nil {
+				break
+			}
+			if jb, err := appCodec.MarshalJSON(h); err == nil {
+				var mm map[string]any
+				if json.Unmarshal(jb, &mm) == nil {
+					agg := contractsByAddr[addr]
+					if agg == nil {
+						agg = &contractAgg{}
+						contractsByAddr[addr] = agg
+					}
+					agg.history = append(agg.history, mm)
+					changed = true
+				}
+			}
+
+		case 0x01:
+			if id, ok := tryUvarint(kb[1:]); ok {
+				ci := new(wasmtypes.CodeInfo)
+				if appCodec.Unmarshal(vb, ci) == nil {
+					if jb, err := appCodec.MarshalJSON(ci); err == nil {
+						var mm map[string]any
+						if json.Unmarshal(jb, &mm) == nil {
+							agg := codesByID[id]
+							if agg == nil {
+								agg = &codeAgg{}
+								codesByID[id] = agg
+							}
+							agg.info = mm
+							changed = true
+						}
 					}
 				}
-				if s := isPrintableUTF8(vb); s {
-					valAny = string(vb)
+			}
+
+		case 0x04, 0x0a:
+			if id, ok := tryUvarint(kb[1:]); ok {
+				agg := codesByID[id]
+				if agg == nil {
+					agg = &codeAgg{}
+					codesByID[id] = agg
 				}
-				keyHex := hex.EncodeToString(kb[2+addrLen:])
-				kv := map[string]any{
-					"key_hex": keyHex,
-					"value":   valAny,
-				}
-				contractStates[addr] = append(contractStates[addr], kv)
+				agg.bytes = w.Value // keep original base64
 				changed = true
-				continue
+			}
+
+		case 0x05:
+			if id, ok := tryUvarint(kb[1:]); ok {
+				agg := codesByID[id]
+				if agg == nil {
+					agg = &codeAgg{}
+					codesByID[id] = agg
+				}
+				agg.pin = true
+				changed = true
 			}
 		}
 	}
@@ -143,28 +228,47 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	if !changed {
 		return nil, false
 	}
+
 	out := make(map[string]any)
 	if len(paramsOut) > 0 {
 		out["params"] = paramsOut
 	}
-	if len(codes) > 0 {
-		out["codes"] = codes
-	}
-	if len(contracts) > 0 {
-		out["contracts"] = contracts
-	}
 	if len(sequences) > 0 {
 		out["sequences"] = sequences
 	}
-	if len(contractStates) > 0 {
-		arr := make([]map[string]any, 0, len(contractStates))
-		for addr, kvs := range contractStates {
-			arr = append(arr, map[string]any{
-				"contract": addr,
-				"kv":       kvs,
-			})
+
+	if len(codesByID) > 0 {
+		codes := make([]map[string]any, 0, len(codesByID))
+		for id, agg := range codesByID {
+			rec := map[string]any{
+				"code_id":   strconv.FormatUint(id, 10),
+				"code_info": agg.info,
+				"pinned":    agg.pin,
+			}
+			if agg.bytes != "" {
+				rec["code_bytes"] = agg.bytes
+			}
+			codes = append(codes, rec)
 		}
-		out["contract_states"] = arr
+		out["codes"] = codes
+	}
+
+	if len(contractsByAddr) > 0 {
+		contracts := make([]map[string]any, 0, len(contractsByAddr))
+		for addr, agg := range contractsByAddr {
+			rec := map[string]any{
+				"contract_address":       addr,
+				"contract_info":          agg.info,
+			}
+			if len(agg.state) > 0 {
+				rec["contract_state"] = agg.state
+			}
+			if len(agg.history) > 0 {
+				rec["contract_code_history"] = agg.history
+			}
+			contracts = append(contracts, rec)
+		}
+		out["contracts"] = contracts
 	}
 
 	if len(out) == 0 {
