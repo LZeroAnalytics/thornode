@@ -105,32 +105,13 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			continue
 		}
 
-		if w.Key == "08" {
-			if x, ok := tryUvarint(vb); ok {
-				sequences["last_code_id"] = x
-				changed = true
-				continue
-			}
-		}
-
-		if pm := new(wasmtypes.Params); appCodec.Unmarshal(vb, pm) == nil {
-			if jb, err := appCodec.MarshalJSON(pm); err == nil {
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil {
-					for k, v := range mm {
-						paramsOut[k] = v
-					}
-					changed = true
-					continue
-				}
-			}
-		}
 
 		kb, err := hex.DecodeString(w.Key)
 		if err != nil || len(kb) == 0 {
 			continue
 		}
 		prefix := kb[0]
+
 
 		switch prefix {
 		case 0x02:
@@ -232,36 +213,24 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			changed = true
 
 		case 0x07:
-			if len(kb) < 3 {
-				break
-			}
-			addrLen := int(kb[1])
-			if addrLen <= 0 || len(kb) < 2+addrLen {
-				break
-			}
-			addrB := kb[2 : 2+addrLen]
-			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
-			if err != nil || addr == "" {
-				break
-			}
-			h := new(wasmtypes.ContractCodeHistoryEntry)
-			var mm map[string]any
-			if appCodec.Unmarshal(vb, h) == nil {
-				if jb, err := appCodec.MarshalJSON(h); err == nil {
-					_ = json.Unmarshal(jb, &mm)
+			if len(kb) >= 2 {
+				if id, ok := readBEU64(kb[1:]); ok {
+					agg := codesByID[id]
+					if agg == nil {
+						agg = &codeAgg{}
+						codesByID[id] = agg
+					}
+					agg.pin = true
+					changed = true
+				} else if id, ok := tryUvarint(kb[1:]); ok {
+					agg := codesByID[id]
+					if agg == nil {
+						agg = &codeAgg{}
+						codesByID[id] = agg
+					}
+					agg.pin = true
+					changed = true
 				}
-			}
-			if mm == nil || len(mm) == 0 {
-				_ = json.Unmarshal(vb, &mm)
-			}
-			if mm != nil && len(mm) > 0 {
-				agg := contractsByAddr[addr]
-				if agg == nil {
-					agg = &contractAgg{}
-					contractsByAddr[addr] = agg
-				}
-				agg.history = append(agg.history, mm)
-				changed = true
 			}
 
 		case 0x01:
@@ -301,51 +270,32 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				}
 			}
 
-		case 0x04, 0x0a:
-			if len(kb) >= 2 {
-				if id, ok := readBEU64(kb[1:]); ok {
-					agg := codesByID[id]
-					if agg == nil {
-						agg = &codeAgg{}
-						codesByID[id] = agg
-					}
-					agg.bytes = w.Value
+		case 0x04:
+			suffix := kb[1:]
+			switch string(suffix) {
+			case "lastCodeId":
+				if x, ok := tryUvarint(vb); ok {
+					sequences["last_code_id"] = x
 					changed = true
-				} else if id, ok := tryUvarint(kb[1:]); ok {
-					agg := codesByID[id]
-					if agg == nil {
-						agg = &codeAgg{}
-						codesByID[id] = agg
-					}
-					agg.bytes = w.Value
+				} else if x, ok := readBEU64(vb); ok {
+					sequences["last_code_id"] = x
+					changed = true
+				}
+			case "lastContractId":
+				if x, ok := tryUvarint(vb); ok {
+					sequences["last_contract_id"] = x
+					changed = true
+				} else if x, ok := readBEU64(vb); ok {
+					sequences["last_contract_id"] = x
 					changed = true
 				}
 			}
+		case 0x0a:
+			break
 
 		case 0x05:
-			if len(kb) >= 2 {
-				if id, ok := readBEU64(kb[1:]); ok {
-					agg := codesByID[id]
-					if agg == nil {
-						agg = &codeAgg{}
-						codesByID[id] = agg
-					}
-					agg.pin = true
-					changed = true
-				} else if id, ok := tryUvarint(kb[1:]); ok {
-					agg := codesByID[id]
-					if agg == nil {
-						agg = &codeAgg{}
-						codesByID[id] = agg
-					}
-					agg.pin = true
-					changed = true
-				}
-			}
-
-		case 0x09:
-			if len(kb) >= 1+32 {
-				addrB := kb[len(kb)-32:]
+			if len(kb) >= 1+32+8 {
+				addrB := kb[1 : 1+32]
 				addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
 				if err == nil && addr != "" {
 					h := new(wasmtypes.ContractCodeHistoryEntry)
@@ -369,6 +319,35 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					}
 				}
 			}
+
+		case 0x09:
+			break
+		for _, w2 := range ws {
+			if w2.Store != storeKey || w2.Op == "delete" || w2.Value == "" {
+				continue
+			}
+			kb2, err := hex.DecodeString(w2.Key)
+			if err != nil || len(kb2) == 0 || kb2[0] != 0x10 {
+				continue
+			}
+			vb2, err := base64.StdEncoding.DecodeString(w2.Value)
+			if err != nil {
+				continue
+			}
+			pm := new(wasmtypes.Params)
+			if appCodec.Unmarshal(vb2, pm) == nil {
+				if jb, err := appCodec.MarshalJSON(pm); err == nil {
+					var mm map[string]any
+					if json.Unmarshal(jb, &mm) == nil {
+						for k, v := range mm {
+							paramsOut[k] = v
+						}
+						changed = true
+					}
+				}
+			}
+		}
+
 		}
 	}
 
