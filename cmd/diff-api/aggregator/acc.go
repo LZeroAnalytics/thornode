@@ -35,6 +35,35 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 			var unpack authtypes.AccountI
 			if err := appCodec.UnpackAny(&anyMsg, &unpack); err == nil && unpack != nil {
 				ai = unpack
+			} else if len(anyMsg.Value) > 0 && ai == nil {
+				var ba authtypes.BaseAccount
+				if err := appCodec.Unmarshal(anyMsg.Value, &ba); err == nil {
+					ai = &ba
+				}
+				if ai == nil {
+					var va vestingtypes.BaseVestingAccount
+					if err := appCodec.Unmarshal(anyMsg.Value, &va); err == nil {
+						ai = &va
+					}
+				}
+				if ai == nil {
+					var ca vestingtypes.ContinuousVestingAccount
+					if err := appCodec.Unmarshal(anyMsg.Value, &ca); err == nil {
+						ai = &ca
+					}
+				}
+				if ai == nil {
+					var da vestingtypes.DelayedVestingAccount
+					if err := appCodec.Unmarshal(anyMsg.Value, &da); err == nil {
+						ai = &da
+					}
+				}
+				if ai == nil {
+					var pa vestingtypes.PeriodicVestingAccount
+					if err := appCodec.Unmarshal(anyMsg.Value, &pa); err == nil {
+						ai = &pa
+					}
+				}
 			}
 		}
 
