@@ -266,7 +266,23 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		case 0x01:
 			if len(kb) >= 2 {
-				if id, ok := parseCodeID(kb[1:]); ok {
+				if id, ok := readBEU64(kb[1:]); ok {
+					ci := new(wasmtypes.CodeInfo)
+					if appCodec.Unmarshal(vb, ci) == nil {
+						if jb, err := appCodec.MarshalJSON(ci); err == nil {
+							var mm map[string]any
+							if json.Unmarshal(jb, &mm) == nil {
+								agg := codesByID[id]
+								if agg == nil {
+									agg = &codeAgg{}
+									codesByID[id] = agg
+								}
+								agg.info = mm
+								changed = true
+							}
+						}
+					}
+				} else if id, ok := tryUvarint(kb[1:]); ok {
 					ci := new(wasmtypes.CodeInfo)
 					if appCodec.Unmarshal(vb, ci) == nil {
 						if jb, err := appCodec.MarshalJSON(ci); err == nil {
@@ -287,7 +303,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		case 0x04, 0x0a:
 			if len(kb) >= 2 {
-				if id, ok := tryUvarint(kb[1:]); ok {
+				if id, ok := readBEU64(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
@@ -295,7 +311,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					}
 					agg.bytes = w.Value
 					changed = true
-				} else if id, ok := readBEU64(kb[1:]); ok {
+				} else if id, ok := tryUvarint(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
@@ -308,7 +324,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		case 0x05:
 			if len(kb) >= 2 {
-				if id, ok := tryUvarint(kb[1:]); ok {
+				if id, ok := readBEU64(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
@@ -316,7 +332,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					}
 					agg.pin = true
 					changed = true
-				} else if id, ok := readBEU64(kb[1:]); ok {
+				} else if id, ok := tryUvarint(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
