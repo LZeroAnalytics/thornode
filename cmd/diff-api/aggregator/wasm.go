@@ -159,12 +159,16 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			}
 			if bytes.Equal(suffix, []byte("contract_info")) {
 				ci := new(wasmtypes.ContractInfo)
-				if appCodec.Unmarshal(vb, ci) != nil {
-					break
-				}
-			if jb, err := appCodec.MarshalJSON(ci); err == nil {
 				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil {
+				if appCodec.Unmarshal(vb, ci) == nil {
+					if jb, err := appCodec.MarshalJSON(ci); err == nil {
+						_ = json.Unmarshal(jb, &mm)
+					}
+				}
+				if mm == nil || len(mm) == 0 {
+					_ = json.Unmarshal(vb, &mm)
+				}
+				if mm != nil && len(mm) > 0 {
 					agg := contractsByAddr[addr]
 					if agg == nil {
 						agg = &contractAgg{}
@@ -173,7 +177,6 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					agg.info = mm
 					changed = true
 				}
-			}
 			} else {
 				keyHex := hex.EncodeToString(suffix)
 				agg := contractsByAddr[addr]
@@ -228,20 +231,23 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				break
 			}
 			h := new(wasmtypes.ContractCodeHistoryEntry)
-			if appCodec.Unmarshal(vb, h) != nil {
-				break
-			}
-			if jb, err := appCodec.MarshalJSON(h); err == nil {
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil {
-					agg := contractsByAddr[addr]
-					if agg == nil {
-						agg = &contractAgg{}
-						contractsByAddr[addr] = agg
-					}
-					agg.history = append(agg.history, mm)
-					changed = true
+			var mm map[string]any
+			if appCodec.Unmarshal(vb, h) == nil {
+				if jb, err := appCodec.MarshalJSON(h); err == nil {
+					_ = json.Unmarshal(jb, &mm)
 				}
+			}
+			if mm == nil || len(mm) == 0 {
+				_ = json.Unmarshal(vb, &mm)
+			}
+			if mm != nil && len(mm) > 0 {
+				agg := contractsByAddr[addr]
+				if agg == nil {
+					agg = &contractAgg{}
+					contractsByAddr[addr] = agg
+				}
+				agg.history = append(agg.history, mm)
+				changed = true
 			}
 
 		case 0x01:
@@ -297,23 +303,16 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
 				if err == nil && addr != "" {
 					h := new(wasmtypes.ContractCodeHistoryEntry)
+					var mm map[string]any
 					if appCodec.Unmarshal(vb, h) == nil {
 						if jb, err := appCodec.MarshalJSON(h); err == nil {
-							var mm map[string]any
-							if json.Unmarshal(jb, &mm) == nil {
-								agg := contractsByAddr[addr]
-								if agg == nil {
-                                    agg = &contractAgg{}
-                                    contractsByAddr[addr] = agg
-                                }
-								agg.history = append(agg.history, mm)
-								changed = true
-								break
-							}
+							_ = json.Unmarshal(jb, &mm)
 						}
 					}
-					var mm map[string]any
-					if json.Unmarshal(vb, &mm) == nil && len(mm) > 0 {
+					if mm == nil || len(mm) == 0 {
+						_ = json.Unmarshal(vb, &mm)
+					}
+					if mm != nil && len(mm) > 0 {
 						agg := contractsByAddr[addr]
 						if agg == nil {
 							agg = &contractAgg{}
