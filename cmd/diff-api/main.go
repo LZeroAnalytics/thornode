@@ -37,6 +37,70 @@ type cumulativeResponse struct {
 	TargetHeight int64     `json:"target_height"`
 	StoreWrites  []kvWrite `json:"store_writes"`
 }
+type patchResp struct {
+	BaseHeight   int64                  `json:"base_height"`
+	TargetHeight int64                  `json:"target_height"`
+	AppState     map[string]any         `json:"app_state"`
+}
+
+type patchCache struct {
+	cap  int
+	keys []int64
+	data map[int64]patchResp
+}
+
+func newPatchCache(cap int) *patchCache {
+	if cap <= 0 {
+		cap = 64
+	}
+	return &patchCache{
+		cap:  cap,
+		data: make(map[int64]patchResp, cap),
+	}
+}
+
+func (c *patchCache) get(h int64) (patchResp, bool) {
+	if c == nil {
+		return patchResp{}, false
+	}
+	v, ok := c.data[h]
+	if !ok {
+		return patchResp{}, false
+	}
+	for i, k := range c.keys {
+		if k == h {
+			c.keys = append(c.keys[:i], c.keys[i+1:]...)
+			break
+		}
+	}
+	c.keys = append(c.keys, h)
+	return v, true
+}
+
+func (c *patchCache) put(h int64, v patchResp) {
+	if c == nil {
+		return
+	}
+	if _, exists := c.data[h]; exists {
+		c.data[h] = v
+		for i, k := range c.keys {
+			if k == h {
+				c.keys = append(c.keys[:i], c.keys[i+1:]...)
+				break
+			}
+		}
+		c.keys = append(c.keys, h)
+		return
+	}
+	if len(c.keys) >= c.cap {
+		lru := c.keys[0]
+		c.keys = c.keys[1:]
+		delete(c.data, lru)
+	}
+	c.data[h] = v
+	c.keys = append(c.keys, h)
+}
+
 
 func envStr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
