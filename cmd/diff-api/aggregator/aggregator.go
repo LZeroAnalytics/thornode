@@ -23,6 +23,18 @@ func init() {
 
 func AggregateAppState(ws []KVWrite) (AppState, error) {
 	out := make(AppState)
+
+	if acc, ok := aggregateAcc(ws); ok && len(acc) > 0 {
+		auth, _ := out["auth"].(map[string]any)
+		if auth == nil {
+			auth = make(map[string]any)
+			out["auth"] = auth
+		}
+		if accs, ok := acc["accounts"]; ok {
+			auth["accounts"] = accs
+		}
+	}
+
 	if bank, ok := aggregateBank(ws); ok && len(bank) > 0 {
 		out["bank"] = bank
 	}
