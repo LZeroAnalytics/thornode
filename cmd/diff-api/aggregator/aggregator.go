@@ -1,7 +1,7 @@
 package aggregator
 
 import (
-	app "gitlab.com/thorchain/thornode/v3/app"
+	appparams "gitlab.com/thorchain/thornode/v3/app/params"
 	"github.com/cosmos/cosmos-sdk/codec"
 )
 
@@ -17,7 +17,7 @@ type AppState = map[string]any
 var appCodec codec.Codec
 
 func init() {
-	ec := app.MakeEncodingConfig()
+	ec := appparams.MakeEncodingConfig()
 	appCodec = ec.Codec
 }
 
