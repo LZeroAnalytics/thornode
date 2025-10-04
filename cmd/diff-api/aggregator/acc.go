@@ -8,6 +8,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	vestingtypes "github.com/cosmos/cosmos-sdk/x/auth/vesting/types"
+	gogoproto "github.com/cosmos/gogoproto/proto"
 )
 
 func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
@@ -95,6 +96,39 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 			var pa vestingtypes.PeriodicVestingAccount
 			if err := appCodec.Unmarshal(bz, &pa); err == nil {
 				ai = &pa
+			}
+		}
+		if ai == nil {
+			var gAny codectypes.Any
+			if err := gogoproto.Unmarshal(bz, &gAny); err == nil && len(gAny.Value) > 0 {
+				var ba authtypes.BaseAccount
+				if err := gogoproto.Unmarshal(gAny.Value, &ba); err == nil {
+					ai = &ba
+				}
+				if ai == nil {
+					var va vestingtypes.BaseVestingAccount
+					if err := gogoproto.Unmarshal(gAny.Value, &va); err == nil {
+						ai = &va
+					}
+				}
+				if ai == nil {
+					var ca vestingtypes.ContinuousVestingAccount
+					if err := gogoproto.Unmarshal(gAny.Value, &ca); err == nil {
+						ai = &ca
+					}
+				}
+				if ai == nil {
+					var da vestingtypes.DelayedVestingAccount
+					if err := gogoproto.Unmarshal(gAny.Value, &da); err == nil {
+						ai = &da
+					}
+				}
+				if ai == nil {
+					var pa vestingtypes.PeriodicVestingAccount
+					if err := gogoproto.Unmarshal(gAny.Value, &pa); err == nil {
+						ai = &pa
+					}
+				}
 			}
 		}
 		if ai == nil {
