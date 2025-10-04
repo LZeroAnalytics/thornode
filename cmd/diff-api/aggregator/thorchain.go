@@ -2,6 +2,7 @@ package aggregator
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 
 	thorchaintypes "gitlab.com/thorchain/thornode/v3/x/thorchain/types"
@@ -38,7 +39,9 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 				continue
 			}
 			var m map[string]any
-			_ = appCodec.UnmarshalJSON(b, &m)
+			if err := json.Unmarshal(b, &m); err != nil {
+				continue
+			}
 			if m != nil {
 				pools = append(pools, m)
 				changed = true
