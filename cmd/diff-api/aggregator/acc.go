@@ -137,10 +137,6 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 			continue
 		}
 
-		addr := strings.TrimSpace(ai.GetAddress().String())
-		if addr == "" {
-			continue
-		}
 		jb, err := appCodec.MarshalJSON(ai)
 		if err != nil {
 			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
@@ -149,6 +145,13 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 		}
 		var mm map[string]any
 		if json.Unmarshal(jb, &mm) != nil {
+			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+			changed = true
+			continue
+		}
+		addr, _ := mm["address"].(string)
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
 			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
 			changed = true
 			continue
