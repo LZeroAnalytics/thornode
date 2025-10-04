@@ -47,10 +47,10 @@ func readBEU64(b []byte) (uint64, bool) {
 }
 
 func parseCodeID(b []byte) (uint64, bool) {
-	if id, ok := readBEU64(b); ok {
+	if id, ok := tryUvarint(b); ok {
 		return id, true
 	}
-	if id, ok := tryUvarint(b); ok {
+	if id, ok := readBEU64(b); ok {
 		return id, true
 	}
 	return 0, false
