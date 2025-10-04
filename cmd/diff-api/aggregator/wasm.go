@@ -12,8 +12,9 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 	codes := make([]map[string]any, 0)
 	contracts := make([]map[string]any, 0)
+	sequences := make(map[string]any)
+
 	paramsOut := make(map[string]any)
-	rawState := make([]map[string]string, 0)
 	changed := false
 
 	for _, w := range ws {
@@ -23,6 +24,26 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 		if w.Op == "delete" || w.Value == "" {
 			continue
 		}
+		if w.Key == "08" {
+			vb, err := base64.StdEncoding.DecodeString(w.Value)
+			if err == nil && len(vb) > 0 {
+				var x uint64
+				var shift uint
+				for i := 0; i < len(vb); i++ {
+					b := vb[i]
+					x |= uint64(b&0x7F) << shift
+					if (b & 0x80) == 0 {
+						break
+					}
+					shift += 7
+				}
+				sequences["last_code_id"] = x
+				changed = true
+				continue
+			}
+			continue
+		}
+
 		vb, err := base64.StdEncoding.DecodeString(w.Value)
 		if err != nil || len(vb) == 0 {
 			continue
@@ -63,11 +84,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			}
 		}
 
-		rawState = append(rawState, map[string]string{
-			"key_hex":   w.Key,
-			"value_b64": w.Value,
-		})
-		changed = true
+		continue
 	}
 
 	if !changed {
@@ -83,9 +100,10 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	if len(contracts) > 0 {
 		out["contracts"] = contracts
 	}
-	if len(rawState) > 0 {
-		out["raw_state"] = rawState
+	if len(sequences) > 0 {
+		out["sequences"] = sequences
 	}
+
 	if len(out) == 0 {
 		return nil, false
 	}

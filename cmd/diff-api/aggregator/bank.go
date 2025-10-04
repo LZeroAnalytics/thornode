@@ -13,7 +13,6 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 	const storeKey = banktypes.StoreKey
 
 	balancesByAddr := make(map[string]map[string]string)
-	rawState := make([]map[string]string, 0)
 	changed := false
 
 	for _, w := range ws {
@@ -58,11 +57,7 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			balancesByAddr[addr][denom] = amt.String()
 			changed = true
 	default:
-			rawState = append(rawState, map[string]string{
-				"key_hex":   w.Key,
-				"value_b64": w.Value,
-			})
-			changed = true
+			continue
 		}
 	}
 
@@ -86,9 +81,6 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			})
 		}
 		out["balances"] = bals
-	}
-	if len(rawState) > 0 {
-		out["raw_state"] = rawState
 	}
 	if len(out) == 0 {
 		return nil, false
