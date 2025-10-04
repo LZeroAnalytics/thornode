@@ -13,6 +13,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	codes := make([]map[string]any, 0)
 	contracts := make([]map[string]any, 0)
 	paramsOut := make(map[string]any)
+	rawState := make([]map[string]string, 0)
 	changed := false
 
 	for _, w := range ws {
@@ -61,6 +62,12 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				}
 			}
 		}
+
+		rawState = append(rawState, map[string]string{
+			"key_hex":   w.Key,
+			"value_b64": w.Value,
+		})
+		changed = true
 	}
 
 	if !changed {
@@ -75,6 +82,9 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	}
 	if len(contracts) > 0 {
 		out["contracts"] = contracts
+	}
+	if len(rawState) > 0 {
+		out["raw_state"] = rawState
 	}
 	if len(out) == 0 {
 		return nil, false
