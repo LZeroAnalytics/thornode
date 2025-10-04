@@ -287,7 +287,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		case 0x04, 0x0a:
 			if len(kb) >= 2 {
-				if id, ok := readBEU64(kb[1:]); ok {
+				if id, ok := tryUvarint(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
@@ -295,7 +295,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					}
 					agg.bytes = w.Value
 					changed = true
-				} else if id, ok := tryUvarint(kb[1:]); ok {
+				} else if id, ok := readBEU64(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
@@ -308,7 +308,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		case 0x05:
 			if len(kb) >= 2 {
-				if id, ok := readBEU64(kb[1:]); ok {
+				if id, ok := tryUvarint(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
@@ -316,7 +316,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					}
 					agg.pin = true
 					changed = true
-				} else if id, ok := tryUvarint(kb[1:]); ok {
+				} else if id, ok := readBEU64(kb[1:]); ok {
 					agg := codesByID[id]
 					if agg == nil {
 						agg = &codeAgg{}
