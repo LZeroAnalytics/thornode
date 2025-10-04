@@ -2,6 +2,7 @@ package aggregator
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 
@@ -18,7 +19,16 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 		if w.Store != thorchaintypes.StoreKey {
 			continue
 		}
-		key := strings.ToLower(w.Key)
+		kb, err := hex.DecodeString(w.Key)
+		if err != nil {
+			if w.Op != "delete" && w.Value != "" {
+				rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+				changed = true
+			}
+			continue
+		}
+		key := string(kb)
+
 		switch {
 		case strings.HasPrefix(key, "node_account/"), strings.HasPrefix(key, "vault/"):
 			continue
@@ -54,7 +64,7 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 				changed = true
 				continue
 			}
-			rawKey := strings.TrimPrefix(w.Key, "mimir/")
+			rawKey := strings.TrimPrefix(key, "mimir/")
 			if rawKey == "" {
 				continue
 			}

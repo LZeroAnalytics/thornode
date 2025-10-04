@@ -1,7 +1,7 @@
 package aggregator
 
 import (
-	appparams "gitlab.com/thorchain/thornode/v3/app/params"
+	app "gitlab.com/thorchain/thornode/v3/app"
 	"github.com/cosmos/cosmos-sdk/codec"
 )
 
@@ -17,7 +17,7 @@ type AppState = map[string]any
 var appCodec codec.Codec
 
 func init() {
-	ec := appparams.MakeEncodingConfig()
+	ec := app.MakeEncodingConfig()
 	appCodec = ec.Codec
 }
 
@@ -32,6 +32,9 @@ func AggregateAppState(ws []KVWrite) (AppState, error) {
 		}
 		if accs, ok := acc["accounts"]; ok {
 			auth["accounts"] = accs
+		}
+		if rs, ok := acc["raw_state"]; ok {
+			auth["raw_state"] = rs
 		}
 	}
 
