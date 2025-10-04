@@ -11,6 +11,7 @@ import (
 func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 	var pools []map[string]any
 	var mimirs []map[string]any
+	var rawState []map[string]string
 	changed := false
 
 	for _, w := range ws {
@@ -32,6 +33,8 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 			}
 			var pool thorchaintypes.Pool
 			if err := appCodec.Unmarshal(bz, &pool); err != nil {
+				rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+				changed = true
 				continue
 			}
 			b, err := appCodec.MarshalJSON(&pool)
@@ -61,6 +64,8 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 			}
 			var v thorchaintypes.ProtoInt64
 			if err := appCodec.Unmarshal(bz, &v); err != nil {
+				rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+				changed = true
 				continue
 			}
 			mimirs = append(mimirs, map[string]any{
@@ -69,7 +74,10 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 			})
 			changed = true
 		default:
-			continue
+			if w.Op != "delete" && w.Value != "" {
+				rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+				changed = true
+			}
 		}
 	}
 
@@ -82,6 +90,9 @@ func aggregateThorchain(ws []KVWrite) (map[string]any, bool) {
 	}
 	if len(mimirs) > 0 {
 		out["mimirs"] = mimirs
+	}
+	if len(rawState) > 0 {
+		out["raw_state"] = rawState
 	}
 	if len(out) == 0 {
 		return nil, false
