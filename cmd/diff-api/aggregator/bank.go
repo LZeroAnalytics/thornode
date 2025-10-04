@@ -3,6 +3,7 @@ package aggregator
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkmath "cosmossdk.io/math"
@@ -13,6 +14,8 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 	const storeKey = banktypes.StoreKey
 
 	balancesByAddr := make(map[string]map[string]string)
+	metadatas := make([]map[string]any, 0)
+	var paramsOut map[string]any
 	changed := false
 
 	for _, w := range ws {
@@ -26,10 +29,10 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 		if err != nil || len(kb) == 0 {
 			continue
 		}
-	switch kb[0] {
-	case 0x00:
-		changed = true
-	case 0x02:
+		switch kb[0] {
+		case 0x00:
+			changed = true
+		case 0x02:
 			if len(kb) < 3 {
 				continue
 			}
@@ -56,7 +59,42 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			}
 			balancesByAddr[addr][denom] = amt.String()
 			changed = true
-	default:
+
+		case 0x03:
+			vb, err := base64.StdEncoding.DecodeString(w.Value)
+			if err != nil || len(vb) == 0 {
+				continue
+			}
+			var md banktypes.Metadata
+			if err := appCodec.Unmarshal(vb, &md); err != nil {
+				continue
+			}
+			if jb, err := appCodec.MarshalJSON(&md); err == nil {
+				var mm map[string]any
+				if err := json.Unmarshal(jb, &mm); err == nil && len(mm) > 0 {
+					metadatas = append(metadatas, mm)
+					changed = true
+				}
+			}
+
+		case 0x11:
+			vb, err := base64.StdEncoding.DecodeString(w.Value)
+			if err != nil || len(vb) == 0 {
+				continue
+			}
+			var pm banktypes.Params
+			if err := appCodec.Unmarshal(vb, &pm); err != nil {
+				continue
+			}
+			if jb, err := appCodec.MarshalJSON(&pm); err == nil {
+				var mm map[string]any
+				if err := json.Unmarshal(jb, &mm); err == nil && len(mm) > 0 {
+					paramsOut = mm
+					changed = true
+				}
+			}
+
+		default:
 			continue
 		}
 	}
@@ -81,6 +119,12 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			})
 		}
 		out["balances"] = bals
+	}
+	if len(metadatas) > 0 {
+		out["denom_metadata"] = metadatas
+	}
+	if len(paramsOut) > 0 {
+		out["params"] = paramsOut
 	}
 	if len(out) == 0 {
 		return nil, false
