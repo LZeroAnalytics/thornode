@@ -43,18 +43,35 @@ func readBEU64(b []byte) (uint64, bool) {
 	if len(b) < 8 {
 		return 0, false
 	}
-	return binary.BigEndian.Uint64(b[:8]), true
+	return binary.BigEndian.Uint64(b[len(b)-8:]), true
 }
 
 func parseCodeID(b []byte) (uint64, bool) {
-	if id, ok := tryUvarint(b); ok {
+	if id, ok := readBEU64(b); ok {
 		return id, true
 	}
-	if id, ok := readBEU64(b); ok {
+	if id, ok := tryUvarint(b); ok {
 		return id, true
 	}
 	return 0, false
 }
+func parseAddrFromKey(kb []byte, start int) (string, bool) {
+	if len(kb) >= start+32 {
+		if a, err := sdk.Bech32ifyAddressBytes("thor", kb[start:start+32]); err == nil && a != "" {
+			return a, true
+		}
+	}
+	if len(kb) >= start+1 {
+		l := int(kb[start])
+		if l > 0 && len(kb) >= start+1+l {
+			if a, err := sdk.Bech32ifyAddressBytes("thor", kb[start+1:start+1+l]); err == nil && a != "" {
+				return a, true
+			}
+		}
+	}
+	return "", false
+}
+
 
 func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	const storeKey = wasmtypes.StoreKey
@@ -117,33 +134,28 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		switch prefix {
 		case 0x02:
-			addrLen := 0
-			if len(kb) >= 2 {
-				addrLen = int(kb[1])
-			}
-			if addrLen <= 0 || len(kb) < 2+addrLen {
-				break
-			}
-			addrB := kb[2 : 2+addrLen]
-			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
-			if err != nil || addr == "" {
+			addr, ok := parseAddrFromKey(kb, 1)
+			if !ok || addr == "" {
 				break
 			}
 			ci := new(wasmtypes.ContractInfo)
-			if appCodec.Unmarshal(vb, ci) != nil {
-				break
-			}
-			if jb, err := appCodec.MarshalJSON(ci); err == nil {
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil {
-					agg := contractsByAddr[addr]
-					if agg == nil {
-						agg = &contractAgg{}
-						contractsByAddr[addr] = agg
-					}
-					agg.info = mm
-					changed = true
+			var mm map[string]any
+			if appCodec.Unmarshal(vb, ci) == nil {
+				if jb, err := appCodec.MarshalJSON(ci); err == nil {
+					_ = json.Unmarshal(jb, &mm)
 				}
+			}
+			if mm == nil && len(vb) > 0 && (vb[0] == '{' || vb[0] == '[') {
+				_ = json.Unmarshal(vb, &mm)
+			}
+			if mm != nil && len(mm) > 0 {
+				agg := contractsByAddr[addr]
+				if agg == nil {
+					agg = &contractAgg{}
+					contractsByAddr[addr] = agg
+				}
+				agg.info = mm
+				changed = true
 			}
 			break
 
@@ -151,11 +163,13 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			if len(kb) < 1+32 {
 				break
 			}
-			addrB := kb[1:33]
-			suffix := kb[33:]
-			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
-			if err != nil || addr == "" {
+			addr, ok := parseAddrFromKey(kb, 1)
+			if !ok || addr == "" {
 				break
+			}
+			suffix := kb[len(kb)- (len(kb)-(1+32)) : ]
+			if len(kb) >= 1+32 {
+				suffix = kb[1+32:]
 			}
 			if bytes.Equal(suffix, []byte("contract_info")) {
 				ci := new(wasmtypes.ContractInfo)
@@ -165,7 +179,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 						_ = json.Unmarshal(jb, &mm)
 					}
 				}
-				if mm == nil || len(mm) == 0 {
+				if mm == nil && len(vb) > 0 && (vb[0] == '{' || vb[0] == '[') {
 					_ = json.Unmarshal(vb, &mm)
 				}
 				if mm != nil && len(mm) > 0 {
@@ -193,19 +207,21 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			break
 
 		case 0x06:
-			if len(kb) < 3 {
+			addr, ok := parseAddrFromKey(kb, 1)
+			if !ok || addr == "" {
 				break
 			}
-			addrLen := int(kb[1])
-			if addrLen <= 0 || len(kb) < 2+addrLen {
+			offset := 1
+			if len(kb) >= offset+32 {
+				offset += 32
+			} else if len(kb) >= offset+1 {
+				l := int(kb[1])
+				offset += 1 + l
+			}
+			if offset > len(kb) {
 				break
 			}
-			addrB := kb[2 : 2+addrLen]
-			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
-			if err != nil || addr == "" {
-				break
-			}
-			keyHex := hex.EncodeToString(kb[2+addrLen:])
+			keyHex := hex.EncodeToString(kb[offset:])
 			agg := contractsByAddr[addr]
 			if agg == nil {
 				agg = &contractAgg{}
@@ -271,7 +287,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				}
 			}
 
-		case 0x04, 0x0a:
+		case 0x04:
 			if len(kb) >= 2 {
 				if id, ok := parseCodeID(kb[1:]); ok {
 					agg := codesByID[id]
