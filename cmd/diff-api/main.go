@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"gitlab.com/thorchain/thornode/v3/cmd/diff-api/aggregator"
 )
 
 type kvWrite struct {
@@ -289,6 +291,50 @@ func handleDiffSince(outDir string, base int64) http.HandlerFunc {
 		writeJSON(w, r, resp)
 	}
 }
+func handlePatchSince(outDir string, base int64) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) != 5 {
+			http.Error(w, "use /bloctopus/diffs/patch/since/{height}", http.StatusBadRequest)
+			return
+		}
+		h, err := parseHeightParam(parts[4])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp, err := foldCumulative(outDir, base, h)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		kvs := make([]aggregator.KVWrite, 0, len(resp.StoreWrites))
+		for _, wv := range resp.StoreWrites {
+			kvs = append(kvs, aggregator.KVWrite{
+				Store: wv.Store,
+				Op:    wv.Op,
+				Key:   wv.Key,
+				Value: wv.Value,
+			})
+		}
+		appState, err := aggregator.AggregateAppState(kvs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		type patchResp struct {
+			BaseHeight   int64                `json:"base_height"`
+			TargetHeight int64                `json:"target_height"`
+			AppState     map[string]any       `json:"app_state"`
+		}
+		writeJSON(w, r, patchResp{
+			BaseHeight:   resp.BaseHeight,
+			TargetHeight: resp.TargetHeight,
+			AppState:     appState,
+		})
+	}
+}
+
 
 func handleDiffHeight(outDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -458,6 +504,7 @@ func main() {
 	mux.Handle("/diffs/block/", handleDiffHeight(outDir))
 	mux.Handle("/diffs/meta", handleMeta(outDir, base))
 	mux.Handle("/diffs/validate", handleValidatePatch())
+	mux.Handle("/bloctopus/diffs/patch/since/", handlePatchSince(outDir, base))
 
 	addr := envStr("DIFF_API_ADDR", ":8080")
 	fmt.Printf("diff-api listening on %s, out=%s, base=%d\n", addr, outDir, base)
