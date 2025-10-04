@@ -16,6 +16,7 @@ Endpoints
 - GET /diffs/meta → { base_height, min_height, max_height, count, sample }
 - GET /diffs/height/{H} and GET /diffs/block/{H} → return the per-block diff file for height H (supports .json and .json.gz; sharded or flat)
 - GET /diffs/since/{H} → returns cumulative KV patch from (base_height, H], using last-write-wins per (store,key). If checkpoints exist, serves “nearest checkpoint + tail” for near O(1).
+- GET /bloctopus/diffs/patch/since/{H} → returns high-level app_state module patches: { base_height, target_height, app_state: {<module>: {...}} }, gzip-enabled.
 - POST /diffs/validate → validate a list of kvWrite items (decode checks)
 
 Behavior
