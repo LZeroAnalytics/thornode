@@ -15,7 +15,6 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 	const storeKey = authtypes.StoreKey
 
 	accMap := make(map[string]map[string]any)
-	rawState := make([]map[string]string, 0)
 	changed := false
 
 	for _, w := range ws {
@@ -24,8 +23,6 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 		}
 		bz, err := base64.StdEncoding.DecodeString(w.Value)
 		if err != nil {
-			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
-			changed = true
 			continue
 		}
 
@@ -132,28 +129,20 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 			}
 		}
 		if ai == nil {
-			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
-			changed = true
 			continue
 		}
 
 		jb, err := appCodec.MarshalJSON(ai)
 		if err != nil {
-			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
-			changed = true
 			continue
 		}
 		var mm map[string]any
 		if json.Unmarshal(jb, &mm) != nil {
-			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
-			changed = true
 			continue
 		}
 		addr, _ := mm["address"].(string)
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
-			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
-			changed = true
 			continue
 		}
 		accMap[addr] = mm
@@ -169,8 +158,5 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 		accounts = append(accounts, v)
 	}
 	out := map[string]any{"accounts": accounts}
-	if len(rawState) > 0 {
-		out["raw_state"] = rawState
-	}
 	return out, true
 }

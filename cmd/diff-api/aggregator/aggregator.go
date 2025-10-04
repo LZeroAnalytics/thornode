@@ -32,9 +32,6 @@ func AggregateAppState(ws []KVWrite) (AppState, error) {
 		if accs, ok := acc["accounts"]; ok {
 			auth["accounts"] = accs
 		}
-		if rs, ok := acc["raw_state"]; ok {
-			auth["raw_state"] = rs
-		}
 	}
 
 	if bank, ok := aggregateBank(ws); ok && len(bank) > 0 {
