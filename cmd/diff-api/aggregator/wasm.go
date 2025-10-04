@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -126,6 +127,49 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					changed = true
 				}
 			}
+			break
+
+		case 0x03:
+			if len(kb) < 1+32 {
+				break
+			}
+			addrB := kb[1:33]
+			suffix := kb[33:]
+			addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
+			if err != nil || addr == "" {
+				break
+			}
+			if bytes.Equal(suffix, []byte("contract_info")) {
+				ci := new(wasmtypes.ContractInfo)
+				if appCodec.Unmarshal(vb, ci) != nil {
+					break
+				}
+			if jb, err := appCodec.MarshalJSON(ci); err == nil {
+				var mm map[string]any
+				if json.Unmarshal(jb, &mm) == nil {
+					agg := contractsByAddr[addr]
+					if agg == nil {
+						agg = &contractAgg{}
+						contractsByAddr[addr] = agg
+					}
+					agg.info = mm
+					changed = true
+				}
+			}
+			} else {
+				keyHex := hex.EncodeToString(suffix)
+				agg := contractsByAddr[addr]
+				if agg == nil {
+					agg = &contractAgg{}
+					contractsByAddr[addr] = agg
+				}
+				agg.state = append(agg.state, map[string]any{
+					"key":   keyHex,
+					"value": w.Value,
+				})
+				changed = true
+			}
+			break
 
 		case 0x06:
 			if len(kb) < 3 {
@@ -208,7 +252,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					agg = &codeAgg{}
 					codesByID[id] = agg
 				}
-				agg.bytes = w.Value // keep original base64
+				agg.bytes = w.Value
 				changed = true
 			}
 
@@ -221,6 +265,40 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 				}
 				agg.pin = true
 				changed = true
+			}
+
+		case 0x09:
+			if len(kb) >= 1+32 {
+				addrB := kb[len(kb)-32:]
+				addr, err := sdk.Bech32ifyAddressBytes("thor", addrB)
+				if err == nil && addr != "" {
+					h := new(wasmtypes.ContractCodeHistoryEntry)
+					if appCodec.Unmarshal(vb, h) == nil {
+						if jb, err := appCodec.MarshalJSON(h); err == nil {
+							var mm map[string]any
+							if json.Unmarshal(jb, &mm) == nil {
+								agg := contractsByAddr[addr]
+								if agg == nil {
+                                    agg = &contractAgg{}
+                                    contractsByAddr[addr] = agg
+                                }
+								agg.history = append(agg.history, mm)
+								changed = true
+								break
+							}
+						}
+					}
+					var mm map[string]any
+					if json.Unmarshal(vb, &mm) == nil && len(mm) > 0 {
+						agg := contractsByAddr[addr]
+						if agg == nil {
+							agg = &contractAgg{}
+							contractsByAddr[addr] = agg
+						}
+						agg.history = append(agg.history, mm)
+						changed = true
+					}
+				}
 			}
 		}
 	}
