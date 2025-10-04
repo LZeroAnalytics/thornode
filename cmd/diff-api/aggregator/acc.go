@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	vestingtypes "github.com/cosmos/cosmos-sdk/x/auth/vesting/types"
 )
@@ -13,124 +14,83 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 	const storeKey = authtypes.StoreKey
 
 	accMap := make(map[string]map[string]any)
+	rawState := make([]map[string]string, 0)
 	changed := false
 
 	for _, w := range ws {
-		if w.Store != storeKey {
-			continue
-		}
-		if w.Op == "delete" || w.Value == "" {
+		if w.Store != storeKey || w.Op == "delete" || w.Value == "" {
 			continue
 		}
 		bz, err := base64.StdEncoding.DecodeString(w.Value)
 		if err != nil {
+			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+			changed = true
 			continue
 		}
 
-		var addr string
-		var m map[string]any
+		var ai authtypes.AccountI
 
-		if ba := new(authtypes.BaseAccount); appCodec.Unmarshal(bz, ba) == nil && ba.Address != "" {
-			if jb, err := appCodec.MarshalJSON(ba); err == nil {
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) == nil {
-					m = mm
-					addr = strings.TrimSpace(ba.Address)
-				}
-			}
-		} else {
-			switch {
-			case func() bool {
-				cv := new(vestingtypes.ContinuousVestingAccount)
-				if appCodec.Unmarshal(bz, cv) != nil {
-					return false
-				}
-				jb, err := appCodec.MarshalJSON(cv)
-				if err != nil {
-					return false
-				}
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) != nil {
-					return false
-				}
-				if bva, ok := mm["base_vesting_account"].(map[string]any); ok {
-					if ba, ok := bva["base_account"].(map[string]any); ok {
-						if a, ok := ba["address"].(string); ok {
-							addr = strings.TrimSpace(a)
-							m = mm
-							return addr != ""
-						}
-					}
-				}
-				return false
-			}():
-			case func() bool {
-				dv := new(vestingtypes.DelayedVestingAccount)
-				if appCodec.Unmarshal(bz, dv) != nil {
-					return false
-				}
-				jb, err := appCodec.MarshalJSON(dv)
-				if err != nil {
-					return false
-				}
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) != nil {
-					return false
-				}
-				if bva, ok := mm["base_vesting_account"].(map[string]any); ok {
-					if ba, ok := bva["base_account"].(map[string]any); ok {
-						if a, ok := ba["address"].(string); ok {
-							addr = strings.TrimSpace(a)
-							m = mm
-							return addr != ""
-						}
-					}
-				}
-				return false
-			}():
-			case func() bool {
-				pv := new(vestingtypes.PeriodicVestingAccount)
-				if appCodec.Unmarshal(bz, pv) != nil {
-					return false
-				}
-				jb, err := appCodec.MarshalJSON(pv)
-				if err != nil {
-					return false
-				}
-				var mm map[string]any
-				if json.Unmarshal(jb, &mm) != nil {
-					return false
-				}
-				if bva, ok := mm["base_vesting_account"].(map[string]any); ok {
-					if ba, ok := bva["base_account"].(map[string]any); ok {
-						if a, ok := ba["address"].(string); ok {
-							addr = strings.TrimSpace(a)
-							m = mm
-							return addr != ""
-						}
-					}
-				}
-				return false
-			}():
-			default:
-				// Fallback: try generic JSON unmarshal path if structure resembles BaseAccount
-				var ba authtypes.BaseAccount
-				if appCodec.Unmarshal(bz, &ba) == nil && ba.Address != "" {
-					if jb, err := appCodec.MarshalJSON(&ba); err == nil {
-						var mm map[string]any
-						if json.Unmarshal(jb, &mm) == nil {
-							m = mm
-							addr = strings.TrimSpace(ba.Address)
-						}
-					}
-				}
+		var anyMsg codectypes.Any
+		if err := appCodec.Unmarshal(bz, &anyMsg); err == nil {
+			var unpack authtypes.AccountI
+			if err := appCodec.UnpackAny(&anyMsg, &unpack); err == nil && unpack != nil {
+				ai = unpack
 			}
 		}
 
-		if addr == "" || m == nil {
+		if ai == nil {
+			var ba authtypes.BaseAccount
+			if err := appCodec.Unmarshal(bz, &ba); err == nil {
+				ai = &ba
+			}
+		}
+		if ai == nil {
+			var va vestingtypes.BaseVestingAccount
+			if err := appCodec.Unmarshal(bz, &va); err == nil {
+				ai = &va
+			}
+		}
+		if ai == nil {
+			var ca vestingtypes.ContinuousVestingAccount
+			if err := appCodec.Unmarshal(bz, &ca); err == nil {
+				ai = &ca
+			}
+		}
+		if ai == nil {
+			var da vestingtypes.DelayedVestingAccount
+			if err := appCodec.Unmarshal(bz, &da); err == nil {
+				ai = &da
+			}
+		}
+		if ai == nil {
+			var pa vestingtypes.PeriodicVestingAccount
+			if err := appCodec.Unmarshal(bz, &pa); err == nil {
+				ai = &pa
+			}
+		}
+		if ai == nil {
+			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+			changed = true
 			continue
 		}
-		accMap[addr] = m
+
+		addr := strings.TrimSpace(ai.GetAddress().String())
+		if addr == "" {
+			continue
+		}
+		jb, err := appCodec.MarshalJSON(ai)
+		if err != nil {
+			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+			changed = true
+			continue
+		}
+		var mm map[string]any
+		if json.Unmarshal(jb, &mm) != nil {
+			rawState = append(rawState, map[string]string{"key_hex": w.Key, "value_b64": w.Value})
+			changed = true
+			continue
+		}
+		accMap[addr] = mm
 		changed = true
 	}
 
@@ -142,8 +102,9 @@ func aggregateAcc(ws []KVWrite) (map[string]any, bool) {
 	for _, v := range accMap {
 		accounts = append(accounts, v)
 	}
-	out := map[string]any{
-		"accounts": accounts,
+	out := map[string]any{"accounts": accounts}
+	if len(rawState) > 0 {
+		out["raw_state"] = rawState
 	}
 	return out, true
 }
