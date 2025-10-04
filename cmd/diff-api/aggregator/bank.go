@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkmath "cosmossdk.io/math"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 )
 
@@ -36,10 +37,13 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			if err != nil || len(vb) == 0 {
 				continue
 			}
-			amount := string(vb)
+			var amt sdkmath.Int
+			if err := amt.Unmarshal(vb); err != nil {
+				continue
+			}
 			supply = append(supply, map[string]any{
 				"denom":  denom,
-				"amount": amount,
+				"amount": amt.String(),
 			})
 			changed = true
 		case 0x02:
@@ -56,7 +60,10 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			if err != nil || len(vb) == 0 {
 				continue
 			}
-			amount := string(vb)
+			var amt sdkmath.Int
+			if err := amt.Unmarshal(vb); err != nil {
+				continue
+			}
 			addr, err := sdk.Bech32ifyAddressBytes("thor", addrBytes)
 			if err != nil || addr == "" {
 				continue
@@ -64,7 +71,7 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 			if _, ok := balancesByAddr[addr]; !ok {
 				balancesByAddr[addr] = make(map[string]string)
 			}
-			balancesByAddr[addr][denom] = amount
+			balancesByAddr[addr][denom] = amt.String()
 			changed = true
 		default:
 			continue
@@ -75,9 +82,6 @@ func aggregateBank(ws []KVWrite) (map[string]any, bool) {
 		return nil, false
 	}
 	out := make(map[string]any)
-	if len(supply) > 0 {
-		out["supply"] = supply
-	}
 	if len(balancesByAddr) > 0 {
 		bals := make([]map[string]any, 0, len(balancesByAddr))
 		for addr, denoms := range balancesByAddr {
