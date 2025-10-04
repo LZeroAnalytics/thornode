@@ -38,9 +38,9 @@ type cumulativeResponse struct {
 	StoreWrites  []kvWrite `json:"store_writes"`
 }
 type patchResp struct {
-	BaseHeight   int64                  `json:"base_height"`
-	TargetHeight int64                  `json:"target_height"`
-	AppState     map[string]any         `json:"app_state"`
+	BaseHeight   int64          `json:"base_height"`
+	TargetHeight int64          `json:"target_height"`
+	AppState     map[string]any `json:"app_state"`
 }
 
 type patchCache struct {
@@ -100,7 +100,6 @@ func (c *patchCache) put(h int64, v patchResp) {
 	c.data[h] = v
 	c.keys = append(c.keys, h)
 }
-
 
 func envStr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -343,7 +342,7 @@ func handleDiffSince(outDir string, base int64) http.HandlerFunc {
 			return
 		}
 		h, err := parseHeightParam(parts[2])
-			if err != nil {
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -358,11 +357,11 @@ func handleDiffSince(outDir string, base int64) http.HandlerFunc {
 func handlePatchSince(outDir string, base int64, cache *patchCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		if len(parts) != 5 {
-			http.Error(w, "use /bloctopus/diffs/patch/since/{height}", http.StatusBadRequest)
+		if len(parts) != 4 {
+			http.Error(w, "use /diffs/patch/since/{height}", http.StatusBadRequest)
 			return
 		}
-		h, err := parseHeightParam(parts[4])
+		h, err := parseHeightParam(parts[3])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -399,7 +398,6 @@ func handlePatchSince(outDir string, base int64, cache *patchCache) http.Handler
 		writeJSON(w, r, out)
 	}
 }
-
 
 func handleDiffHeight(outDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -546,7 +544,7 @@ func buildCheckpoints(outDir string, base int64) {
 
 func main() {
 	outDir := envStr("THOR_DIFF_OUT", "/root/.thornode/diffs")
-	baseStr := envStr("THOR_DIFF_BASE_HEIGHT", "")
+	baseStr := envStr("THOR_DIFF_BASE_HEIGHT", "23010003")
 	var base int64
 	if baseStr != "" {
 		if v, err := strconv.ParseInt(baseStr, 10, 64); err == nil {
@@ -570,7 +568,7 @@ func main() {
 	mux.Handle("/diffs/meta", handleMeta(outDir, base))
 	mux.Handle("/diffs/validate", handleValidatePatch())
 	patchCacheInst := newPatchCache(64)
-	mux.Handle("/bloctopus/diffs/patch/since/", handlePatchSince(outDir, base, patchCacheInst))
+	mux.Handle("/diffs/patch/since/", handlePatchSince(outDir, base, patchCacheInst))
 
 	addr := envStr("DIFF_API_ADDR", ":8080")
 	fmt.Printf("diff-api listening on %s, out=%s, base=%d\n", addr, outDir, base)
