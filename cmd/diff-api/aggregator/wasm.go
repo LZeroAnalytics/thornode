@@ -10,6 +10,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
+	"encoding/binary"
 )
 
 func tryUvarint(b []byte) (uint64, bool) {
@@ -36,6 +37,23 @@ func isPrintableUTF8(b []byte) bool {
 		}
 	}
 	return true
+}
+
+func readBEU64(b []byte) (uint64, bool) {
+	if len(b) < 8 {
+		return 0, false
+	}
+	return binary.BigEndian.Uint64(b[:8]), true
+}
+
+func parseCodeID(b []byte) (uint64, bool) {
+	if id, ok := tryUvarint(b); ok {
+		return id, true
+	}
+	if id, ok := readBEU64(b); ok {
+		return id, true
+	}
+	return 0, false
 }
 
 func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
@@ -227,44 +245,50 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			}
 
 		case 0x01:
-			if id, ok := tryUvarint(kb[1:]); ok {
-				ci := new(wasmtypes.CodeInfo)
-				if appCodec.Unmarshal(vb, ci) == nil {
-					if jb, err := appCodec.MarshalJSON(ci); err == nil {
-						var mm map[string]any
-						if json.Unmarshal(jb, &mm) == nil {
-							agg := codesByID[id]
-							if agg == nil {
-								agg = &codeAgg{}
-								codesByID[id] = agg
+			if len(kb) >= 2 {
+				if id, ok := parseCodeID(kb[1:]); ok {
+					ci := new(wasmtypes.CodeInfo)
+					if appCodec.Unmarshal(vb, ci) == nil {
+						if jb, err := appCodec.MarshalJSON(ci); err == nil {
+							var mm map[string]any
+							if json.Unmarshal(jb, &mm) == nil {
+								agg := codesByID[id]
+								if agg == nil {
+									agg = &codeAgg{}
+									codesByID[id] = agg
+								}
+								agg.info = mm
+								changed = true
 							}
-							agg.info = mm
-							changed = true
 						}
 					}
 				}
 			}
 
 		case 0x04, 0x0a:
-			if id, ok := tryUvarint(kb[1:]); ok {
-				agg := codesByID[id]
-				if agg == nil {
-					agg = &codeAgg{}
-					codesByID[id] = agg
+			if len(kb) >= 2 {
+				if id, ok := parseCodeID(kb[1:]); ok {
+					agg := codesByID[id]
+					if agg == nil {
+						agg = &codeAgg{}
+						codesByID[id] = agg
+					}
+					agg.bytes = w.Value
+					changed = true
 				}
-				agg.bytes = w.Value
-				changed = true
 			}
 
 		case 0x05:
-			if id, ok := tryUvarint(kb[1:]); ok {
-				agg := codesByID[id]
-				if agg == nil {
-					agg = &codeAgg{}
-					codesByID[id] = agg
+			if len(kb) >= 2 {
+				if id, ok := parseCodeID(kb[1:]); ok {
+					agg := codesByID[id]
+					if agg == nil {
+						agg = &codeAgg{}
+						codesByID[id] = agg
+					}
+					agg.pin = true
+					changed = true
 				}
-				agg.pin = true
-				changed = true
 			}
 
 		case 0x09:
