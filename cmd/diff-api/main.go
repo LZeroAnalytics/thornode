@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gitlab.com/thorchain/thornode/v3/cmd/diff-api/aggregator"
 )
@@ -416,45 +417,90 @@ func enrichWasmCodeBytes(appState map[string]any, height int64) {
 	if !ok {
 		return
 	}
-	codes, ok := codesAny.([]any)
-	if !ok || len(codes) == 0 {
+	var idx int
+	var next func() (map[string]any, bool)
+	if slice, ok := codesAny.([]map[string]any); ok && len(slice) > 0 {
+		next = func() (map[string]any, bool) {
+			if idx >= len(slice) {
+				return nil, false
+			}
+			m := slice[idx]
+			idx++
+			return m, true
+		}
+	} else if sliceAny, ok := codesAny.([]any); ok && len(sliceAny) > 0 {
+		next = func() (map[string]any, bool) {
+			if idx >= len(sliceAny) {
+				return nil, false
+			}
+			m, ok := sliceAny[idx].(map[string]any)
+			idx++
+			if !ok {
+				return nil, false
+			}
+			return m, true
+		}
+	} else {
 		return
 	}
 	base := envStr("WASM_CODE_BASE", "https://thorchain.bloctopus.io/api")
 	client := &http.Client{
-		Timeout: 3 * 1e9,
+		Timeout: 3 * time.Second,
 	}
-	for i := range codes {
-		rec, ok := codes[i].(map[string]any)
+	logEnrich := envStr("DIFF_LOG_WASM_ENRICH", "") != ""
+	for {
+		rec, ok := next()
 		if !ok {
-			continue
+			break
 		}
 		if _, exists := rec["code_bytes"]; exists {
 			continue
 		}
-		idStr, _ := rec["code_id"].(string)
+		var idStr string
+		switch v := rec["code_id"].(type) {
+		case string:
+			idStr = v
+		case float64:
+			idStr = strconv.FormatInt(int64(v), 10)
+		default:
+			if n, ok := rec["code_id"].(json.Number); ok {
+				idStr = string(n)
+			}
+		}
 		if idStr == "" {
 			continue
 		}
 		url := fmt.Sprintf("%s/cosmwasm/wasm/v1/code/%s", strings.TrimRight(base, "/"), idStr)
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
+			if logEnrich {
+				fmt.Printf("wasm enrich: newreq id=%s err=%v\n", idStr, err)
+			}
 			continue
 		}
 		req.Header.Set("x-cosmos-block-height", strconv.FormatInt(height, 10))
 		resp, err := client.Do(req)
 		if err != nil {
+			if logEnrich {
+				fmt.Printf("wasm enrich: http id=%s err=%v\n", idStr, err)
+			}
 			continue
 		}
 		func() {
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
 				io.Copy(io.Discard, resp.Body)
+				if logEnrich {
+					fmt.Printf("wasm enrich: non200 id=%s status=%d\n", idStr, resp.StatusCode)
+				}
 				return
 			}
 			var cbr codeBytesResp
 			dec := json.NewDecoder(resp.Body)
 			if err := dec.Decode(&cbr); err != nil || cbr.Data == "" {
+				if logEnrich {
+					fmt.Printf("wasm enrich: decode/empty id=%s err=%v\n", idStr, err)
+				}
 				return
 			}
 			rec["code_bytes"] = cbr.Data
