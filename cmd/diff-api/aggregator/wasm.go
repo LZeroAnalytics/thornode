@@ -186,31 +186,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 			break
 
 		case 0x06:
-			addr, ok := parseAddrFromKey(kb, 1)
-			if !ok || addr == "" {
-				break
-			}
-			offset := 1
-			if len(kb) >= offset+32 {
-				offset += 32
-			} else if len(kb) >= offset+1 {
-				l := int(kb[1])
-				offset += 1 + l
-			}
-			if offset > len(kb) {
-				break
-			}
-			keyHex := hex.EncodeToString(kb[offset:])
-			agg := contractsByAddr[addr]
-			if agg == nil {
-				agg = &contractAgg{}
-				contractsByAddr[addr] = agg
-			}
-			agg.state = append(agg.state, map[string]any{
-				"key":   keyHex,
-				"value": w.Value,
-			})
-			changed = true
+			break
 
 		case 0x07:
 			if len(kb) >= 2 {
@@ -322,23 +298,12 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 
 		case 0x09:
 			break
-		for _, w2 := range ws {
-			if w2.Store != storeKey || w2.Op == "delete" || w2.Value == "" {
-				continue
-			}
-			kb2, err := hex.DecodeString(w2.Key)
-			if err != nil || len(kb2) == 0 || kb2[0] != 0x10 {
-				continue
-			}
-			vb2, err := base64.StdEncoding.DecodeString(w2.Value)
-			if err != nil {
-				continue
-			}
+		case 0x10:
 			pm := new(wasmtypes.Params)
-			if appCodec.Unmarshal(vb2, pm) == nil {
+			if appCodec.Unmarshal(vb, pm) == nil {
 				if jb, err := appCodec.MarshalJSON(pm); err == nil {
 					var mm map[string]any
-					if json.Unmarshal(jb, &mm) == nil {
+					if json.Unmarshal(jb, &mm) == nil && len(mm) > 0 {
 						for k, v := range mm {
 							paramsOut[k] = v
 						}
@@ -346,7 +311,6 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 					}
 				}
 			}
-		}
 
 		}
 	}

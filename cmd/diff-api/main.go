@@ -389,6 +389,7 @@ func handlePatchSince(outDir string, base int64, cache *patchCache) http.Handler
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		enrichWasmCodeBytes(appState, resp.TargetHeight)
 		out := patchResp{
 			BaseHeight:   resp.BaseHeight,
 			TargetHeight: resp.TargetHeight,
@@ -398,6 +399,69 @@ func handlePatchSince(outDir string, base int64, cache *patchCache) http.Handler
 		writeJSON(w, r, out)
 	}
 }
+type codeBytesResp struct {
+	Data string `json:"data"`
+}
+
+func enrichWasmCodeBytes(appState map[string]any, height int64) {
+	wasmAny, ok := appState["wasm"]
+	if !ok {
+		return
+	}
+	wasm, ok := wasmAny.(map[string]any)
+	if !ok {
+		return
+	}
+	codesAny, ok := wasm["codes"]
+	if !ok {
+		return
+	}
+	codes, ok := codesAny.([]any)
+	if !ok || len(codes) == 0 {
+		return
+	}
+	base := envStr("WASM_CODE_BASE", "https://thorchain.bloctopus.io/api")
+	client := &http.Client{
+		Timeout: 3 * 1e9,
+	}
+	for i := range codes {
+		rec, ok := codes[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, exists := rec["code_bytes"]; exists {
+			continue
+		}
+		idStr, _ := rec["code_id"].(string)
+		if idStr == "" {
+			continue
+		}
+		url := fmt.Sprintf("%s/cosmwasm/wasm/v1/code/%s", strings.TrimRight(base, "/"), idStr)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("x-cosmos-block-height", strconv.FormatInt(height, 10))
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		func() {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				io.Copy(io.Discard, resp.Body)
+				return
+			}
+			var cbr codeBytesResp
+			dec := json.NewDecoder(resp.Body)
+			if err := dec.Decode(&cbr); err != nil || cbr.Data == "" {
+				return
+			}
+			rec["code_bytes"] = cbr.Data
+		}()
+	}
+}
+
 
 func handleDiffHeight(outDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
