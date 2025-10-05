@@ -320,9 +320,7 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 	}
 
 	out := make(map[string]any)
-	if len(paramsOut) > 0 {
-		out["params"] = paramsOut
-	}
+	out["params"] = paramsOut
 	if len(sequences) > 0 {
 		out["sequences"] = sequences
 	}
@@ -347,14 +345,18 @@ func aggregateWasm(ws []KVWrite) (map[string]any, bool) {
 		contracts := make([]map[string]any, 0, len(contractsByAddr))
 		for addr, agg := range contractsByAddr {
 			rec := map[string]any{
-				"contract_address":       addr,
-				"contract_info":          agg.info,
+				"contract_address": addr,
+				"contract_info":    agg.info,
 			}
 			if len(agg.state) > 0 {
 				rec["contract_state"] = agg.state
+			} else {
+				rec["contract_state"] = []any{}
 			}
 			if len(agg.history) > 0 {
 				rec["contract_code_history"] = agg.history
+			} else {
+				rec["contract_code_history"] = []any{}
 			}
 			contracts = append(contracts, rec)
 		}
