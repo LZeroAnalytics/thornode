@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"gitlab.com/thorchain/thornode/v3/constants"
+	"os"
 	"time"
+
+	"gitlab.com/thorchain/thornode/v3/constants"
 
 	storetypes "cosmossdk.io/core/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -90,6 +92,9 @@ func (f *forkingKVStore) shouldAllowRemoteFetch() bool {
 }
 
 func (f *forkingKVStore) Get(key []byte) ([]byte, error) {
+	if os.Getenv("THOR_FORK_DEBUG") == "1" && (f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc") {
+		fmt.Printf("[rpc-debug][GET] store=%s key=%s allowRemote=%v\n", f.storeKey, hex.EncodeToString(key), f.shouldAllowRemoteFetch())
+	}
 	if f.storeKey == "wasm" && len(key) > 0 && key[0] == 0x02 {
 		fmt.Printf("[forking][GET][wasm] ContractInfo key len=%d key=%s\n", len(key), hex.EncodeToString(key))
 	}
@@ -190,13 +195,17 @@ func (f *forkingKVStore) Delete(key []byte) error {
 }
 
 func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error) {
+	if os.Getenv("THOR_FORK_DEBUG") == "1" && (f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc") {
+		s, e := start, end
+		fmt.Printf("[rpc-debug][ITER] store=%s start=%s end=%s allowRemote=%v\n", f.storeKey, hex.EncodeToString(s), hex.EncodeToString(e), f.shouldAllowRemoteFetch())
+	}
 	localIter, err := f.parent.Iterator(start, end)
 	if err != nil {
 		fmt.Printf("[forking][ITER] local-err store=%s err=%v\n", f.storeKey, err)
 		return nil, err
 	}
 
-	if !f.shouldAllowRemoteFetch() {
+	if f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc" || !f.shouldAllowRemoteFetch() {
 		return localIter, nil
 	}
 
@@ -208,13 +217,17 @@ func (f *forkingKVStore) Iterator(start, end []byte) (storetypes.Iterator, error
 }
 
 func (f *forkingKVStore) ReverseIterator(start, end []byte) (storetypes.Iterator, error) {
+	if os.Getenv("THOR_FORK_DEBUG") == "1" && (f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc") {
+		s, e := start, end
+		fmt.Printf("[rpc-debug][RITER] store=%s start=%s end=%s allowRemote=%v\n", f.storeKey, hex.EncodeToString(s), hex.EncodeToString(e), f.shouldAllowRemoteFetch())
+	}
 	localIter, err := f.parent.ReverseIterator(start, end)
 	if err != nil {
 		fmt.Printf("[forking][RITER] local-err store=%s err=%v\n", f.storeKey, err)
 		return nil, err
 	}
 
-	if !f.shouldAllowRemoteFetch() {
+	if f.storeKey == "bank" || f.storeKey == "auth" || f.storeKey == "acc" || !f.shouldAllowRemoteFetch() {
 		return localIter, nil
 	}
 

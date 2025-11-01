@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -60,11 +62,17 @@ func (w *BankQueryWrapper) extractUserAPICall(goCtx context.Context) context.Con
 }
 
 func (w *BankQueryWrapper) Balance(goCtx context.Context, req *banktypes.QueryBalanceRequest) (*banktypes.QueryBalanceResponse, error) {
+	if os.Getenv("THOR_FORK_DEBUG") == "1" {
+		fmt.Printf("[rpc-debug] BankQueryWrapper.Balance entry\n")
+	}
 	ctx := w.extractUserAPICall(goCtx)
 	return w.originalHandler.Balance(ctx, req)
 }
 
 func (w *BankQueryWrapper) AllBalances(goCtx context.Context, req *banktypes.QueryAllBalancesRequest) (*banktypes.QueryAllBalancesResponse, error) {
+	if os.Getenv("THOR_FORK_DEBUG") == "1" {
+		fmt.Printf("[rpc-debug] BankQueryWrapper.AllBalances entry\n")
+	}
 	ctx := w.extractUserAPICall(goCtx)
 	return w.originalHandler.AllBalances(ctx, req)
 }
