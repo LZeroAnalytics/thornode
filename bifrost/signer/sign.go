@@ -339,15 +339,14 @@ func (s *Signer) scheduleKeygenRetry(keygenBlock ttypes.KeygenBlock) bool {
 		// every block, try to start processing again
 		for {
 			time.Sleep(constants.ThorchainBlockTime)
-			// trunk-ignore(golangci-lint/govet): shadow
-			height, err := s.thorchainBridge.GetBlockHeight()
+			currentHeight, err := s.thorchainBridge.GetBlockHeight()
 			if err != nil {
 				s.logger.Error().Err(err).Msg("fail to get last chain height")
 			}
-			if height >= targetRetryHeight {
+			if currentHeight >= targetRetryHeight {
 				s.logger.Info().
 					Interface("keygenBlock", keygenBlock).
-					Int64("currentHeight", height).
+					Int64("currentHeight", currentHeight).
 					Msg("retrying keygen")
 				s.processKeygenBlock(keygenBlock)
 				return
@@ -599,7 +598,7 @@ func (s *Signer) signAndBroadcast(item TxOutStoreItem) ([]byte, *types.TxInItem,
 		s.logger.Info().Msg("signing has been halted globally")
 		return nil, nil, nil
 	}
-	mimirKey = fmt.Sprintf("HALTSIGNING%s", tx.Chain)
+	mimirKey = fmt.Sprintf(constants.MimirTemplateHaltSigning, tx.Chain)
 	haltSigningMimir, err := s.thorchainBridge.GetMimir(mimirKey)
 	if err != nil {
 		s.logger.Err(err).Msgf("fail to get %s", mimirKey)

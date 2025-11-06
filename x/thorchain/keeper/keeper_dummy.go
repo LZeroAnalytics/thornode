@@ -860,6 +860,30 @@ func (k KVStoreDummy) DeductNativeTxFeeFromAccount(ctx cosmos.Context, acctAddr 
 	return kaboom
 }
 
+func (k KVStoreDummy) ReferenceMemoExists(ctx cosmos.Context, _ common.Asset, _ string) bool {
+	return false
+}
+
+func (k KVStoreDummy) GetReferenceMemo(ctx cosmos.Context, _ common.Asset, _ string) (ReferenceMemo, error) {
+	return ReferenceMemo{}, kaboom
+}
+
+func (k KVStoreDummy) GetReferenceMemoByTxnHash(ctx cosmos.Context, _ common.TxID) (ReferenceMemo, error) {
+	return ReferenceMemo{}, kaboom
+}
+
+func (k KVStoreDummy) SetReferenceMemo(ctx cosmos.Context, name ReferenceMemo)     {}
+func (k KVStoreDummy) GetReferenceMemoIterator(ctx cosmos.Context) cosmos.Iterator { return nil }
+func (k KVStoreDummy) DeleteReferenceMemo(ctx cosmos.Context, _ common.Asset, _ string) error {
+	return kaboom
+}
+
+func (k KVStoreDummy) GetLastReferenceNumber(ctx cosmos.Context, asset common.Asset) string {
+	return ""
+}
+
+func (k KVStoreDummy) SetLastReferenceNumber(ctx cosmos.Context, asset common.Asset, ref string) {}
+
 func (k KVStoreDummy) GetSwapperCloutIterator(ctx cosmos.Context) cosmos.Iterator    { return nil }
 func (k KVStoreDummy) SetSwapperClout(ctx cosmos.Context, record SwapperClout) error { return kaboom }
 func (k KVStoreDummy) GetSwapperClout(ctx cosmos.Context, addr common.Address) (SwapperClout, error) {
@@ -879,6 +903,23 @@ func (k KVStoreDummy) GetPrice(_ cosmos.Context, _ string) (OraclePrice, error) 
 }
 func (k KVStoreDummy) DelPrice(_ cosmos.Context, _ string) {}
 func (k KVStoreDummy) GetPriceIterator(_ cosmos.Context) cosmos.Iterator {
+	return nil
+}
+
+func (k KVStoreDummy) GetVolumeBucket(_ cosmos.Context, _ common.Asset, _ int64) (VolumeBucket, error) {
+	return VolumeBucket{}, nil
+}
+
+func (k KVStoreDummy) GetVolumeBucketIterator(_ cosmos.Context, _ common.Asset) cosmos.Iterator {
+	return nil
+}
+
+func (k KVStoreDummy) SetVolumeBucket(_ cosmos.Context, _ VolumeBucket) error { return nil }
+func (k KVStoreDummy) GetVolume(_ cosmos.Context, _ common.Asset) (Volume, error) {
+	return Volume{}, kaboom
+}
+
+func (k KVStoreDummy) SetVolume(_ cosmos.Context, _ Volume) error {
 	return nil
 }
 

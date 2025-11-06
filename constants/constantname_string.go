@@ -153,26 +153,34 @@ func _() {
 	_ = x[TCYClaimingHalt-142]
 	_ = x[HaltRebond-143]
 	_ = x[HaltOperatorRotate-144]
-	_ = x[RequiredPriceFeeds-145]
-	_ = x[HaltOracle-146]
-	_ = x[OracleUpdateInterval-147]
-	_ = x[ReserveMaxCap-148]
-	_ = x[ArtificialRagnarokBlockHeight-149]
-	_ = x[BondLockupPeriod-150]
-	_ = x[BurnSynths-151]
-	_ = x[DefaultPoolStatus-152]
-	_ = x[ManualSwapsToSynthDisabled-153]
-	_ = x[MaximumLiquidityRune-154]
-	_ = x[MintSynths-155]
-	_ = x[NumberOfNewNodesPerChurn-156]
-	_ = x[SignerConcurrency-157]
-	_ = x[StrictBondLiquidityRatio-158]
-	_ = x[SwapOutDexAggregationDisabled-159]
+	_ = x[HaltMemoless-145]
+	_ = x[RequiredPriceFeeds-146]
+	_ = x[HaltOracle-147]
+	_ = x[OracleUpdateInterval-148]
+	_ = x[ReserveMaxCap-149]
+	_ = x[MarketingFundSystemIncomeBps-150]
+	_ = x[MarketingFundAddress-151]
+	_ = x[MaxDepositTxIDRetries-152]
+	_ = x[ArtificialRagnarokBlockHeight-153]
+	_ = x[BondLockupPeriod-154]
+	_ = x[BurnSynths-155]
+	_ = x[DefaultPoolStatus-156]
+	_ = x[ManualSwapsToSynthDisabled-157]
+	_ = x[MaximumLiquidityRune-158]
+	_ = x[MintSynths-159]
+	_ = x[NumberOfNewNodesPerChurn-160]
+	_ = x[SignerConcurrency-161]
+	_ = x[MemolessTxnTTL-162]
+	_ = x[MemolessTxnRefCount-163]
+	_ = x[MemolessTxnCost-164]
+	_ = x[MemolessTxnMaxUse-165]
+	_ = x[StrictBondLiquidityRatio-166]
+	_ = x[SwapOutDexAggregationDisabled-167]
 }
 
-const _ConstantName_name = "EmissionCurveMaxRuneSupplyBlocksPerYearOutboundTransactionFeeNativeTransactionFeePoolCycleMinRunePoolDepthMaxAvailablePoolsStagedPoolCostPendingLiquidityAgeLimitMinimumNodesForBFTDesiredValidatorSetAsgardSizeDerivedDepthBasisPtsDerivedMinDepthMaxAnchorSlipMaxAnchorBlocksDynamicMaxAnchorSlipBlocksDynamicMaxAnchorTargetDynamicMaxAnchorCalcIntervalChurnIntervalChurnRetryIntervalMissingBlockChurnOutMaxMissingBlockChurnOutMaxTrackMissingBlockBadValidatorRedlineLackOfObservationPenaltySigningTransactionPeriodDoubleSignMaxAgePauseBondPauseUnbondMinimumBondInRuneFundMigrationIntervalMaxOutboundAttemptsSlashPenaltyPauseOnSlashThresholdFailKeygenSlashPointsFailKeysignSlashPointsLiquidityLockUpBlocksObserveSlashPointsDoubleBlockSignSlashPointsMissBlockSignSlashPointsObservationDelayFlexibilityJailTimeKeygenJailTimeKeysignNodePauseChainBlocksEnableDerivedAssetsMinSwapsPerBlockMaxSwapsPerBlockEnableOrderBooksEnableAdvSwapQueueAdvSwapQueueRapidSwapMaxMaxSynthPerPoolDepthMaxSynthsForSaversYieldVirtualMultSynthsVirtualMultSynthsBasisPointsMinSlashPointsForBadValidatorMaxBondProvidersMinTxOutVolumeThresholdTxOutDelayRateTxOutDelayMaxMaxTxOutOffsetTNSRegisterFeeTNSFeeOnSaleTNSFeePerBlockStreamingSwapPauseStreamingSwapMinBPFeeStreamingSwapMaxLengthStreamingSwapMaxLengthNativeStreamingLimitSwapMaxAgeMinCRMaxCRLoanStreamingSwapsIntervalPauseLoansLoanRepaymentMaturityLendingLeverPermittedSolvencyGapNodeOperatorFeeValidatorMaxRewardRatioMaxNodeToChurnOutForLowVersionChurnOutForLowVersionBlocksPOLMaxNetworkDepositPOLMaxPoolMovementPOLTargetSynthPerPoolDepthPOLBufferRagnarokProcessNumOfLPPerIterationSynthYieldBasisPointsSynthYieldCycleMinimumL1OutboundFeeUSDMinimumPoolLiquidityFeeChurnMigrateRoundsAllowWideBlameMaxAffiliateFeeBasisPointsTargetOutboundFeeSurplusRuneMaxOutboundFeeMultiplierBasisPointsMinOutboundFeeMultiplierBasisPointsNativeOutboundFeeUSDNativeTransactionFeeUSDTNSRegisterFeeUSDTNSFeePerBlockUSDEnableUSDFeesPreferredAssetOutboundFeeMultiplierFeeUSDRoundSignificantDigitsMigrationVaultSecurityBpsCloutResetCloutLimitKeygenRetryIntervalSaversStreamingSwapsIntervalRescheduleCoalesceBlocksL1SlipMinBpsSynthSlipMinBpsTradeAccountsSlipMinBpsDerivedSlipMinBpsSlipMinBpsMaxTradeAccountsEnabledTradeAccountsDepositEnabledSecuredAssetSlipMinBpsEVMDisableContractWhitelistOperationalVotesMinRUNEPoolEnabledRUNEPoolDepositMaturityBlocksRUNEPoolMaxReserveBackstopSaversEjectIntervalSystemIncomeBurnRateBpsDevFundSystemIncomeBpsDevFundAddressPendulumAssetsBasisPointsPendulumUseEffectiveSecurityPendulumUseVaultAssetsTVLCapBasisPointsMultipleAffiliatesMaxCountBondSlashBanBankSendEnabledRUNEPoolHaltDepositRUNEPoolHaltWithdrawMinRuneForTCYStakeDistributionMinTCYForTCYStakeDistributionTCYStakeSystemIncomeBpsTCYClaimingSwapHaltTCYStakeDistributionHaltTCYStakingHaltTCYUnstakingHaltTCYClaimingHaltHaltRebondHaltOperatorRotateRequiredPriceFeedsHaltOracleOracleUpdateIntervalReserveMaxCapArtificialRagnarokBlockHeightBondLockupPeriodBurnSynthsDefaultPoolStatusManualSwapsToSynthDisabledMaximumLiquidityRuneMintSynthsNumberOfNewNodesPerChurnSignerConcurrencyStrictBondLiquidityRatioSwapOutDexAggregationDisabled"
+const _ConstantName_name = "EmissionCurveMaxRuneSupplyBlocksPerYearOutboundTransactionFeeNativeTransactionFeePoolCycleMinRunePoolDepthMaxAvailablePoolsStagedPoolCostPendingLiquidityAgeLimitMinimumNodesForBFTDesiredValidatorSetAsgardSizeDerivedDepthBasisPtsDerivedMinDepthMaxAnchorSlipMaxAnchorBlocksDynamicMaxAnchorSlipBlocksDynamicMaxAnchorTargetDynamicMaxAnchorCalcIntervalChurnIntervalChurnRetryIntervalMissingBlockChurnOutMaxMissingBlockChurnOutMaxTrackMissingBlockBadValidatorRedlineLackOfObservationPenaltySigningTransactionPeriodDoubleSignMaxAgePauseBondPauseUnbondMinimumBondInRuneFundMigrationIntervalMaxOutboundAttemptsSlashPenaltyPauseOnSlashThresholdFailKeygenSlashPointsFailKeysignSlashPointsLiquidityLockUpBlocksObserveSlashPointsDoubleBlockSignSlashPointsMissBlockSignSlashPointsObservationDelayFlexibilityJailTimeKeygenJailTimeKeysignNodePauseChainBlocksEnableDerivedAssetsMinSwapsPerBlockMaxSwapsPerBlockEnableOrderBooksEnableAdvSwapQueueAdvSwapQueueRapidSwapMaxMaxSynthPerPoolDepthMaxSynthsForSaversYieldVirtualMultSynthsVirtualMultSynthsBasisPointsMinSlashPointsForBadValidatorMaxBondProvidersMinTxOutVolumeThresholdTxOutDelayRateTxOutDelayMaxMaxTxOutOffsetTNSRegisterFeeTNSFeeOnSaleTNSFeePerBlockStreamingSwapPauseStreamingSwapMinBPFeeStreamingSwapMaxLengthStreamingSwapMaxLengthNativeStreamingLimitSwapMaxAgeMinCRMaxCRLoanStreamingSwapsIntervalPauseLoansLoanRepaymentMaturityLendingLeverPermittedSolvencyGapNodeOperatorFeeValidatorMaxRewardRatioMaxNodeToChurnOutForLowVersionChurnOutForLowVersionBlocksPOLMaxNetworkDepositPOLMaxPoolMovementPOLTargetSynthPerPoolDepthPOLBufferRagnarokProcessNumOfLPPerIterationSynthYieldBasisPointsSynthYieldCycleMinimumL1OutboundFeeUSDMinimumPoolLiquidityFeeChurnMigrateRoundsAllowWideBlameMaxAffiliateFeeBasisPointsTargetOutboundFeeSurplusRuneMaxOutboundFeeMultiplierBasisPointsMinOutboundFeeMultiplierBasisPointsNativeOutboundFeeUSDNativeTransactionFeeUSDTNSRegisterFeeUSDTNSFeePerBlockUSDEnableUSDFeesPreferredAssetOutboundFeeMultiplierFeeUSDRoundSignificantDigitsMigrationVaultSecurityBpsCloutResetCloutLimitKeygenRetryIntervalSaversStreamingSwapsIntervalRescheduleCoalesceBlocksL1SlipMinBpsSynthSlipMinBpsTradeAccountsSlipMinBpsDerivedSlipMinBpsSlipMinBpsMaxTradeAccountsEnabledTradeAccountsDepositEnabledSecuredAssetSlipMinBpsEVMDisableContractWhitelistOperationalVotesMinRUNEPoolEnabledRUNEPoolDepositMaturityBlocksRUNEPoolMaxReserveBackstopSaversEjectIntervalSystemIncomeBurnRateBpsDevFundSystemIncomeBpsDevFundAddressPendulumAssetsBasisPointsPendulumUseEffectiveSecurityPendulumUseVaultAssetsTVLCapBasisPointsMultipleAffiliatesMaxCountBondSlashBanBankSendEnabledRUNEPoolHaltDepositRUNEPoolHaltWithdrawMinRuneForTCYStakeDistributionMinTCYForTCYStakeDistributionTCYStakeSystemIncomeBpsTCYClaimingSwapHaltTCYStakeDistributionHaltTCYStakingHaltTCYUnstakingHaltTCYClaimingHaltHaltRebondHaltOperatorRotateHaltMemolessRequiredPriceFeedsHaltOracleOracleUpdateIntervalReserveMaxCapMarketingFundSystemIncomeBpsMarketingFundAddressMaxDepositTxIDRetriesArtificialRagnarokBlockHeightBondLockupPeriodBurnSynthsDefaultPoolStatusManualSwapsToSynthDisabledMaximumLiquidityRuneMintSynthsNumberOfNewNodesPerChurnSignerConcurrencyMemolessTxnTTLMemolessTxnRefCountMemolessTxnCostMemolessTxnMaxUseStrictBondLiquidityRatioSwapOutDexAggregationDisabled"
 
-var _ConstantName_index = [...]uint16{0, 13, 26, 39, 61, 81, 90, 106, 123, 137, 161, 179, 198, 208, 228, 243, 256, 271, 297, 319, 347, 360, 378, 398, 421, 441, 460, 484, 508, 524, 533, 544, 561, 582, 601, 613, 634, 655, 677, 698, 716, 742, 766, 793, 807, 822, 842, 861, 877, 893, 909, 927, 951, 971, 994, 1011, 1039, 1068, 1084, 1107, 1121, 1134, 1148, 1162, 1174, 1188, 1206, 1227, 1249, 1277, 1301, 1306, 1311, 1337, 1347, 1368, 1380, 1400, 1415, 1438, 1468, 1495, 1515, 1533, 1559, 1568, 1602, 1623, 1638, 1661, 1684, 1702, 1716, 1742, 1770, 1805, 1840, 1860, 1883, 1900, 1917, 1930, 1965, 1993, 2018, 2028, 2038, 2057, 2085, 2109, 2121, 2136, 2159, 2176, 2189, 2209, 2236, 2258, 2285, 2304, 2319, 2348, 2374, 2393, 2416, 2438, 2452, 2477, 2505, 2527, 2544, 2570, 2582, 2597, 2616, 2636, 2666, 2695, 2718, 2737, 2761, 2775, 2791, 2806, 2816, 2834, 2852, 2862, 2882, 2895, 2924, 2940, 2950, 2967, 2993, 3013, 3023, 3047, 3064, 3088, 3117}
+var _ConstantName_index = [...]uint16{0, 13, 26, 39, 61, 81, 90, 106, 123, 137, 161, 179, 198, 208, 228, 243, 256, 271, 297, 319, 347, 360, 378, 398, 421, 441, 460, 484, 508, 524, 533, 544, 561, 582, 601, 613, 634, 655, 677, 698, 716, 742, 766, 793, 807, 822, 842, 861, 877, 893, 909, 927, 951, 971, 994, 1011, 1039, 1068, 1084, 1107, 1121, 1134, 1148, 1162, 1174, 1188, 1206, 1227, 1249, 1277, 1301, 1306, 1311, 1337, 1347, 1368, 1380, 1400, 1415, 1438, 1468, 1495, 1515, 1533, 1559, 1568, 1602, 1623, 1638, 1661, 1684, 1702, 1716, 1742, 1770, 1805, 1840, 1860, 1883, 1900, 1917, 1930, 1965, 1993, 2018, 2028, 2038, 2057, 2085, 2109, 2121, 2136, 2159, 2176, 2189, 2209, 2236, 2258, 2285, 2304, 2319, 2348, 2374, 2393, 2416, 2438, 2452, 2477, 2505, 2527, 2544, 2570, 2582, 2597, 2616, 2636, 2666, 2695, 2718, 2737, 2761, 2775, 2791, 2806, 2816, 2834, 2846, 2864, 2874, 2894, 2907, 2935, 2955, 2976, 3005, 3021, 3031, 3048, 3074, 3094, 3104, 3128, 3145, 3159, 3178, 3193, 3210, 3234, 3263}
 
 func (i ConstantName) String() string {
 	if i < 0 || i >= ConstantName(len(_ConstantName_index)-1) {

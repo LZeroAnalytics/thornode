@@ -68,6 +68,7 @@ type (
 	RagnarokWithdrawPosition = types.RagnarokWithdrawPosition
 	ChainContract            = types.ChainContract
 	SolvencyVoter            = types.SolvencyVoter
+	ReferenceMemo            = types.ReferenceMemo
 	THORName                 = types.THORName
 	AffiliateFeeCollector    = types.AffiliateFeeCollector
 	SwapperClout             = types.SwapperClout
@@ -81,4 +82,6 @@ type (
 	TCYStaker                = types.TCYStaker
 	PriceFeed                = types.PriceFeed
 	OraclePrice              = types.OraclePrice
+	Volume                   = types.Volume
+	VolumeBucket             = types.VolumeBucket
 )

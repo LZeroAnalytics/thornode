@@ -157,10 +157,14 @@ const (
 	TCYClaimingHalt
 	HaltRebond
 	HaltOperatorRotate
+	HaltMemoless
 	RequiredPriceFeeds
 	HaltOracle
 	OracleUpdateInterval
 	ReserveMaxCap
+	MarketingFundSystemIncomeBps
+	MarketingFundAddress
+	MaxDepositTxIDRetries
 
 	// These are the implicitly-0 Constants undisplayed in the API endpoint (no explicit value set).
 	ArtificialRagnarokBlockHeight
@@ -172,6 +176,10 @@ const (
 	MintSynths
 	NumberOfNewNodesPerChurn
 	SignerConcurrency
+	MemolessTxnTTL
+	MemolessTxnRefCount
+	MemolessTxnCost
+	MemolessTxnMaxUse
 	StrictBondLiquidityRatio
 	SwapOutDexAggregationDisabled
 )

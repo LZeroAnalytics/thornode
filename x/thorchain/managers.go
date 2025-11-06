@@ -3,7 +3,6 @@ package thorchain
 import (
 	"errors"
 	"fmt"
-	"gitlab.com/thorchain/thornode/v3/x/bloctopus"
 
 	"cosmossdk.io/core/store"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
@@ -17,6 +16,7 @@ import (
 
 	"gitlab.com/thorchain/thornode/v3/common"
 	"gitlab.com/thorchain/thornode/v3/common/cosmos"
+	"gitlab.com/thorchain/thornode/v3/common/wasmpermissions"
 	"gitlab.com/thorchain/thornode/v3/constants"
 	"gitlab.com/thorchain/thornode/v3/x/thorchain/keeper"
 	kv1 "gitlab.com/thorchain/thornode/v3/x/thorchain/keeper/v1"
@@ -240,6 +240,10 @@ type OracleManager interface {
 	BeginBlock(ctx cosmos.Context) error
 }
 
+type VolumeManager interface {
+	EndBlock(ctx cosmos.Context) error
+}
+
 // Mgrs is an implementation of Manager interface
 type Mgrs struct {
 	currentVersion semver.Version
@@ -259,6 +263,7 @@ type Mgrs struct {
 	wasmManager    WasmManager
 	switchManager  SwitchManager
 	oracleManager  OracleManager
+	volumeManager  VolumeManager
 
 	K             keeper.Keeper
 	cdc           codec.Codec
@@ -412,6 +417,11 @@ func (mgr *Mgrs) recreateManagers(ctx cosmos.Context, v semver.Version) error {
 		return fmt.Errorf("fail to create oracle manager: %w", err)
 	}
 
+	mgr.volumeManager, err = GetVolumeManager(v, mgr.K)
+	if err != nil {
+		return fmt.Errorf("fail to create volume manager: %w", err)
+	}
+
 	return nil
 }
 
@@ -457,6 +467,8 @@ func (mgr *Mgrs) WasmManager() WasmManager { return mgr.wasmManager }
 func (mgr *Mgrs) SwitchManager() SwitchManager { return mgr.switchManager }
 
 func (mgr *Mgrs) OracleManager() OracleManager { return mgr.oracleManager }
+
+func (mgr *Mgrs) VolumeManager() VolumeManager { return mgr.volumeManager }
 
 // GetKeeper return Keeper
 func GetKeeper(
@@ -587,7 +599,7 @@ func GetSecuredAssetManager(version semver.Version, keeper keeper.Keeper, eventM
 }
 
 func GetWasmManager(ctx cosmos.Context, keeper keeper.Keeper, wasmKeeper wasmkeeper.Keeper, eventMgr EventManager) (WasmManager, error) {
-	return bloctopus.NewWasmMgrPermissionless(keeper, wasmKeeper)
+	return newWasmMgrVCUR(keeper, wasmKeeper, wasmpermissions.GetWasmPermissions(), eventMgr)
 }
 
 func GetSwitchManager(version semver.Version, keeper keeper.Keeper, eventMgr EventManager) (SwitchManager, error) {
@@ -596,4 +608,8 @@ func GetSwitchManager(version semver.Version, keeper keeper.Keeper, eventMgr Eve
 
 func GetOracleManager(_ semver.Version, keeper keeper.Keeper, eventMgr EventManager) (OracleManager, error) {
 	return newOracleMgrVCUR(keeper), nil
+}
+
+func GetVolumeManager(_ semver.Version, keeper keeper.Keeper) (VolumeManager, error) {
+	return newVolumeMgrVCUR(keeper), nil
 }

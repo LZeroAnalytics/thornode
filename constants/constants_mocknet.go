@@ -9,7 +9,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
+
+var ThorchainBlockTime = time.Second
 
 func camelToSnakeUpper(s string) string {
 	re := regexp.MustCompile(`([a-z0-9])([A-Z])|([A-Z]+)([A-Z][a-z])`)
@@ -24,6 +27,8 @@ func init() {
 		ChurnInterval:                       60,
 		ChurnRetryInterval:                  30,
 		MinimumBondInRune:                   100_000_000, // 1 rune
+		MemolessTxnTTL:                      100,
+		MemolessTxnMaxUse:                   5, // higher limit for testing
 		ValidatorMaxRewardRatio:             3,
 		FundMigrationInterval:               15,
 		LiquidityLockUpBlocks:               0,
@@ -55,6 +60,7 @@ func init() {
 		SaversEjectInterval:                 60,
 		SystemIncomeBurnRateBps:             0,
 		DevFundSystemIncomeBps:              0,
+		MarketingFundSystemIncomeBps:        0,
 		TCYStakeSystemIncomeBps:             0,
 		MultipleAffiliatesMaxCount:          5,
 		BankSendEnabled:                     1,
@@ -63,8 +69,9 @@ func init() {
 		StrictBondLiquidityRatio: false,
 	}
 	stringOverrides = map[ConstantName]string{
-		DefaultPoolStatus: "Available",
-		DevFundAddress:    "tthor1qk8c8sfrmfm0tkncs0zxeutc8v5mx3pjj07k4u", // addr_thor_pig in regtest
+		DefaultPoolStatus:    "Available",
+		DevFundAddress:       "tthor1qk8c8sfrmfm0tkncs0zxeutc8v5mx3pjj07k4u", // addr_thor_pig in regtest
+		MarketingFundAddress: "tthor1qk8c8sfrmfm0tkncs0zxeutc8v5mx3pjj07k4u", // same as dev fund in regtest
 	}
 
 	v1Values := NewConstantValue()

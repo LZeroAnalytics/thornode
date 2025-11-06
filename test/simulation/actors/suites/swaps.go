@@ -4,10 +4,40 @@ import (
 	"math/rand"
 
 	"gitlab.com/thorchain/thornode/v3/common"
+	acommon "gitlab.com/thorchain/thornode/v3/test/simulation/actors/common"
 	"gitlab.com/thorchain/thornode/v3/test/simulation/actors/core"
 	"gitlab.com/thorchain/thornode/v3/test/simulation/pkg/evm"
 	. "gitlab.com/thorchain/thornode/v3/test/simulation/pkg/types"
 )
+
+////////////////////////////////////////////////////////////////////////////////////////
+// MemolessSwaps
+////////////////////////////////////////////////////////////////////////////////////////
+
+func MemolessSwaps() *Actor {
+	a := NewActor("Memoless Swaps")
+
+	// memoless swaps
+	simChains1e8 := []common.Chain{}
+	for _, chain := range acommon.SimChains {
+		if chain.GetGasAssetDecimal() == 8 {
+			simChains1e8 = append(simChains1e8, chain)
+		}
+	}
+
+	for _, t := range []core.MemolessType{core.MemolessTypeRef, core.MemolessTypeAmount} {
+		for _, chain := range simChains1e8 {
+			// choose a random (other) pool to swap to
+			j := rand.Intn(len(acommon.SimChains))
+			for chain.Equals(acommon.SimChains[j]) {
+				j = rand.Intn(len(acommon.SimChains))
+			}
+			a.Children[core.NewSwapMemolessActor(chain.GetGasAsset(), acommon.SimChains[j].GetGasAsset(), t)] = true
+		}
+	}
+
+	return a
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // Swaps
@@ -18,7 +48,7 @@ func Swaps() *Actor {
 
 	// gather all pools we expect to swap through
 	swapPools := []common.Asset{}
-	for _, chain := range SimChains {
+	for _, chain := range acommon.SimChains {
 		swapPools = append(swapPools, chain.GetGasAsset())
 
 		// add tokens to swap pools

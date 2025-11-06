@@ -845,11 +845,6 @@ func (HandlerSuite) TestWillSwapSucceed(c *C) {
 	msg = NewMsgSwap(tx, common.RuneNative, GetRandomTHORAddress(), cosmos.ZeroUint(), common.NoAddress, cosmos.ZeroUint(), "", "", nil, types.SwapType_market, 0, 0, types.SwapVersion_v1, GetRandomBech32Addr())
 	c.Assert(willSwapOutputExceedLimitAndFees(ctx, mgr, *msg), Equals, true)
 
-	// swap to RUNE, no limit, but small swap, should fail
-	tx.Coins = common.Coins{common.NewCoin(common.BTCAsset, cosmos.NewUint(1))}
-	msg = NewMsgSwap(tx, common.RuneNative, GetRandomTHORAddress(), cosmos.ZeroUint(), common.NoAddress, cosmos.ZeroUint(), "", "", nil, types.SwapType_market, 0, 0, types.SwapVersion_v1, GetRandomBech32Addr())
-	c.Assert(willSwapOutputExceedLimitAndFees(ctx, mgr, *msg), Equals, false)
-
 	// swap to RUNE, limit too high, should fail
 	tx.Coins = common.Coins{common.NewCoin(common.BTCAsset, cosmos.NewUint(common.One))}
 	msg = NewMsgSwap(tx, common.RuneNative, GetRandomTHORAddress(), cosmos.NewUint(100_000*common.One), common.NoAddress, cosmos.ZeroUint(), "", "", nil, types.SwapType_market, 0, 0, types.SwapVersion_v1, GetRandomBech32Addr())
@@ -1286,4 +1281,26 @@ func (s *HelperSuite) TestSettleSwapStreamingLimitSwap(c *C) {
 	// Verify it's recognized as a limit swap
 	c.Assert(streamingLimitSwapMsg.IsLimitSwap(), Equals, true)
 	c.Assert(streamingLimitSwapMsg.State.Quantity, Equals, uint64(10))
+}
+
+func (s *HelperSuite) TestLeadingZeros(c *C) {
+	// Test case where string length is less than the given length
+	// The function should pad the string with leading zeros.
+	c.Assert(leadingZeros(5, "123"), Equals, "00123")
+
+	// Test case where string length is greater than the given length
+	// The function should truncate the string to the given length.
+	c.Assert(leadingZeros(2, "12345"), Equals, "12")
+
+	// Test case where string length is equal to the given length
+	// The function should return the string as it is.
+	c.Assert(leadingZeros(5, "12345"), Equals, "12345")
+
+	// Test case where string is empty
+	// The function should return a string with the given length filled with zeros.
+	c.Assert(leadingZeros(5, ""), Equals, "00000")
+
+	// Test case where length is zero
+	// The function should return an empty string regardless of the input string.
+	c.Assert(leadingZeros(0, "12345"), Equals, "")
 }

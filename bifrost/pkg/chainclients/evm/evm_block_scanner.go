@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+	"sync"
 
 	_ "embed"
 
@@ -297,13 +298,6 @@ func (e *EVMScanner) processBlock(block *etypes.Block) (stypes.TxIn, error) {
 		return txIn, nil
 	}
 
-	// collect gas prices of txs in current block
-	var txsGas []*big.Int
-	for _, tx := range block.Transactions() {
-		txsGas = append(txsGas, tx.GasPrice())
-	}
-	e.updateGasPrice(txsGas)
-
 	// process reorg if possible on this chain
 	if e.cfg.MaxReorgRescanBlocks > 0 {
 		reorgedTxIns, err := e.processReorg(block.Header())
@@ -321,18 +315,22 @@ func (e *EVMScanner) processBlock(block *etypes.Block) (stypes.TxIn, error) {
 		}
 	}
 
-	// collect all relevant transactions from the block
-	txInBlock, err := e.getTxIn(block)
+	// collect all relevant transactions from the block and their gas prices
+	txInBlock, gasPrices, err := e.getTxIn(block)
 	if err != nil {
 		return txIn, err
 	}
 	if len(txInBlock.TxArray) > 0 {
 		txIn.TxArray = append(txIn.TxArray, txInBlock.TxArray...)
 	}
+
+	// update gas price from collected receipt effective gas prices
+	e.updateGasPrice(gasPrices)
+
 	return txIn, nil
 }
 
-func (e *EVMScanner) getTxInOptimized(method string, block *etypes.Block) (stypes.TxIn, error) {
+func (e *EVMScanner) getTxInOptimized(method string, block *etypes.Block) (stypes.TxIn, []*big.Int, error) {
 	// Use custom method name as it varies between implementation
 	// It should be akin to: "fetch all transaction receipts within a block", e.g. getBlockReceipts
 	// This has shown to be more efficient than getTransactionReceipt in a batch call
@@ -371,56 +369,75 @@ func (e *EVMScanner) getTxInOptimized(method string, block *etypes.Block) (stype
 	)
 	if err != nil {
 		e.logger.Error().Err(err).Msg("failed to fetch block receipts")
-		return stypes.TxIn{}, err
+		return stypes.TxIn{}, nil, err
 	}
+
+	sem := make(chan struct{}, e.cfg.Concurrency)
+	wg := sync.WaitGroup{}
+	mu := sync.Mutex{}
+	var gasPrices []*big.Int
 
 	for _, receipt := range receipts {
-		txForReceipt, ok := txByHash[receipt.TxHash.String()]
-		if !ok {
-			e.logger.Warn().
-				Str("txHash", receipt.TxHash.String()).
-				Uint64("blockNumber", block.NumberU64()).
-				Msg("receipt tx not in block.Transactions or nil, ignoring...")
-			continue
-		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(receipt *etypes.Receipt) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			txForReceipt, ok := txByHash[receipt.TxHash.String()]
+			if !ok {
+				e.logger.Warn().
+					Str("txHash", receipt.TxHash.String()).
+					Uint64("blockNumber", block.NumberU64()).
+					Msg("receipt tx not in block.Transactions or nil, ignoring...")
+				return
+			}
 
-		// tx without to address is not valid
-		if txForReceipt.To() == nil {
-			continue
-		}
+			// collect effective gas price from receipt for gas price tracking
+			mu.Lock()
+			gasPrices = append(gasPrices, receipt.EffectiveGasPrice)
+			mu.Unlock()
 
-		// extract the txInItem
-		var txInItem *stypes.TxInItem
-		txInItem, err = e.receiptToTxInItem(txForReceipt, receipt)
-		if err != nil {
-			e.logger.Error().Err(err).Msg("failed to convert receipt to txInItem")
-			continue
-		}
+			// tx without to address is not valid
+			if txForReceipt.To() == nil {
+				return
+			}
 
-		// skip invalid items
-		if txInItem == nil {
-			continue
-		}
-		if len(txInItem.To) == 0 {
-			continue
-		}
-		if len([]byte(txInItem.Memo)) > constants.MaxMemoSize {
-			continue
-		}
+			// extract the txInItem
+			var txInItem *stypes.TxInItem
+			txInItem, err = e.receiptToTxInItem(txForReceipt, receipt)
+			if err != nil {
+				e.logger.Error().Err(err).Msg("failed to convert receipt to txInItem")
+				return
+			}
 
-		// add the txInItem to the txInbound
-		txInItem.BlockHeight = block.Number().Int64()
-		txInbound.TxArray = append(txInbound.TxArray, txInItem)
+			// skip invalid items
+			if txInItem == nil {
+				return
+			}
+			if len(txInItem.To) == 0 {
+				return
+			}
+			if len([]byte(txInItem.Memo)) > constants.MaxMemoSize {
+				return
+			}
+
+			// add the txInItem to the txInbound
+			txInItem.BlockHeight = block.Number().Int64()
+			mu.Lock()
+			txInbound.TxArray = append(txInbound.TxArray, txInItem)
+			mu.Unlock()
+		}(receipt)
 	}
+	wg.Wait()
 
 	if len(txInbound.TxArray) == 0 {
 		e.logger.Debug().Uint64("block", block.NumberU64()).Msg("no tx need to be processed in this block")
-		return stypes.TxIn{}, nil
+		return stypes.TxIn{}, gasPrices, nil
 	}
-	return txInbound, nil
+	return txInbound, gasPrices, nil
 }
 
-func (e *EVMScanner) getTxIn(block *etypes.Block) (stypes.TxIn, error) {
+func (e *EVMScanner) getTxIn(block *etypes.Block) (stypes.TxIn, []*big.Int, error) {
 	// CHANGEME: if an EVM chain supports some way of fetching all transaction receipts
 	// within a block, register it here.
 	switch e.cfg.ChainID {
@@ -433,6 +450,7 @@ func (e *EVMScanner) getTxIn(block *etypes.Block) (stypes.TxIn, error) {
 		Filtered: false,
 		MemPool:  false,
 	}
+	var gasPrices []*big.Int
 
 	// collect all relevant transactions from the block into batches
 	batches := [][]*etypes.Transaction{}
@@ -478,7 +496,7 @@ func (e *EVMScanner) getTxIn(block *etypes.Block) (stypes.TxIn, error) {
 		err := e.ethClient.Client().BatchCall(rpcBatch)
 		if err != nil {
 			e.logger.Error().Int("size", len(batch)).Err(err).Msg("failed to batch fetch transaction receipts")
-			return stypes.TxIn{}, err
+			return stypes.TxIn{}, nil, err
 		}
 
 		// process the batch rpc response
@@ -496,6 +514,9 @@ func (e *EVMScanner) getTxIn(block *etypes.Block) (stypes.TxIn, error) {
 				e.logger.Error().Msg("failed to cast to transaction receipt")
 				continue
 			}
+
+			// collect effective gas price from receipt for gas price tracking
+			gasPrices = append(gasPrices, receipt.EffectiveGasPrice)
 
 			// extract the txInItem
 			var txInItem *stypes.TxInItem
@@ -524,9 +545,9 @@ func (e *EVMScanner) getTxIn(block *etypes.Block) (stypes.TxIn, error) {
 
 	if len(txInbound.TxArray) == 0 {
 		e.logger.Debug().Uint64("block", block.NumberU64()).Msg("no tx need to be processed in this block")
-		return stypes.TxIn{}, nil
+		return stypes.TxIn{}, gasPrices, nil
 	}
-	return txInbound, nil
+	return txInbound, gasPrices, nil
 }
 
 // TODO: This is only used by unit tests now, but covers receiptToTxInItem internally -
@@ -640,7 +661,7 @@ func (e *EVMScanner) processReorg(header *etypes.Header) ([]stypes.TxIn, error) 
 			continue
 		}
 		var txIn stypes.TxIn
-		txIn, err = e.getTxIn(block)
+		txIn, _, err = e.getTxIn(block) // discard gas prices during reorg rescan
 		if err != nil {
 			e.logger.Err(err).Int64("height", rescanHeight).Msg("fail to extract txs from block")
 			continue
@@ -725,9 +746,20 @@ func (e *EVMScanner) updateGasPrice(prices []*big.Int) {
 		return
 	}
 
+	// filter out nil gas prices (defensive check for EIP-1559 and other dynamic fee transactions)
+	validPrices := make([]*big.Int, 0, len(prices))
+	for _, price := range prices {
+		if price != nil {
+			validPrices = append(validPrices, price)
+		}
+	}
+	if len(validPrices) == 0 {
+		return
+	}
+
 	// find the median gas price in the block
-	sort.Slice(prices, func(i, j int) bool { return prices[i].Cmp(prices[j]) == -1 })
-	gasPrice := prices[len(prices)/2]
+	sort.Slice(validPrices, func(i, j int) bool { return validPrices[i].Cmp(validPrices[j]) == -1 })
+	gasPrice := validPrices[len(validPrices)/2]
 
 	// add to the cache
 	e.gasCache = append(e.gasCache, gasPrice)
@@ -742,7 +774,14 @@ func (e *EVMScanner) updateGasPrice(prices []*big.Int) {
 
 	// compute the median of the median prices in the cache
 	medians := []*big.Int{}
-	medians = append(medians, e.gasCache...)
+	for _, price := range e.gasCache {
+		if price != nil {
+			medians = append(medians, price)
+		}
+	}
+	if len(medians) == 0 {
+		return
+	}
 	sort.Slice(medians, func(i, j int) bool { return medians[i].Cmp(medians[j]) == -1 })
 	median := medians[len(medians)/2]
 
@@ -835,7 +874,10 @@ func (e *EVMScanner) getTxInFromTransaction(tx *etypes.Transaction, receipt *ety
 
 	nativeValue := e.tokenManager.ConvertAmount(evm.NativeTokenAddr, tx.Value())
 	txInItem.Coins = append(txInItem.Coins, common.NewCoin(e.cfg.ChainID.GetGasAsset(), nativeValue))
-	txGasPrice := tx.GasPrice()
+	txGasPrice := receipt.EffectiveGasPrice
+	if txGasPrice == nil {
+		txGasPrice = big.NewInt(0)
+	}
 	txInItem.Gas = common.MakeEVMGas(e.cfg.ChainID, txGasPrice, receipt.GasUsed, receipt.L1Fee)
 	txInItem.Gas[0].Asset = e.cfg.ChainID.GetGasAsset()
 
@@ -871,8 +913,9 @@ func (e *EVMScanner) isToValidContractAddress(addr *ecommon.Address, includeWhit
 	}
 
 	// combine the whitelist smart contract address
+	addrString := addr.String() // this hashes internally so do it once
 	for _, item := range contractAddresses {
-		if strings.EqualFold(item.String(), addr.String()) {
+		if strings.EqualFold(item.String(), addrString) {
 			return true
 		}
 	}
@@ -931,15 +974,12 @@ func (e *EVMScanner) getTxInFromSmartContract(tx *etypes.Transaction, receipt *e
 			}
 		}
 	}
-	e.logger.Debug().
-		Str("tx hash", txInItem.Tx).
-		Str("gas price", tx.GasPrice().String()).
-		Uint64("gas used", receipt.GasUsed).
-		Uint64("tx status", receipt.Status).
-		Msg("txInItem parsed from smart contract")
 
 	// under no circumstance EVM gas price will be less than 1 Gwei, unless it is in dev environment
-	txGasPrice := tx.GasPrice()
+	txGasPrice := receipt.EffectiveGasPrice
+	if txGasPrice == nil {
+		txGasPrice = big.NewInt(0)
+	}
 	txInItem.Gas = common.MakeEVMGas(e.cfg.ChainID, txGasPrice, receipt.GasUsed, receipt.L1Fee)
 	if txInItem.Coins.IsEmpty() {
 		return nil, nil
@@ -966,7 +1006,10 @@ func (e *EVMScanner) getTxInFromFailedTransaction(tx *etypes.Transaction, receip
 	if !ok || cif.IsEmpty() {
 		return nil
 	}
-	txGasPrice := tx.GasPrice()
+	txGasPrice := receipt.EffectiveGasPrice
+	if txGasPrice == nil {
+		txGasPrice = big.NewInt(0)
+	}
 	txHash := tx.Hash().Hex()[2:]
 	return &stypes.TxInItem{
 		Tx:     txHash,

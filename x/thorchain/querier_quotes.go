@@ -291,14 +291,20 @@ func quoteSimulateSwap(ctx cosmos.Context, mgr *Mgrs, amount sdkmath.Uint, msg *
 	finalSwap := swaps[len(swaps)-1]
 
 	// parse outbound fee from event
-	outboundFeeCoin, err := common.ParseCoin(fee["coins"])
-	if err != nil {
-		return nil, sdkmath.ZeroUint(), sdkmath.ZeroUint(), fmt.Errorf("unable to parse outbound fee coin: %w", err)
+	if fee["coins"] == "" {
+		outboundFeeAmount = sdkmath.ZeroUint()
+	} else {
+		var outboundFeeCoin common.Coin
+		outboundFeeCoin, err = common.ParseCoin(fee["coins"])
+		if err != nil {
+			return nil, sdkmath.ZeroUint(), sdkmath.ZeroUint(), fmt.Errorf("unable to parse outbound fee coin: %w", err)
+		}
+		outboundFeeAmount = outboundFeeCoin.Amount
 	}
-	outboundFeeAmount = outboundFeeCoin.Amount
 
 	// parse outbound amount from event
-	emitCoin, err := common.ParseCoin(finalSwap["emit_asset"])
+	var emitCoin common.Coin
+	emitCoin, err = common.ParseCoin(finalSwap["emit_asset"])
 	if err != nil {
 		return nil, sdkmath.ZeroUint(), sdkmath.ZeroUint(), fmt.Errorf("unable to parse emit coin: %w", err)
 	}
@@ -351,7 +357,8 @@ func quoteInboundInfo(ctx cosmos.Context, mgr *Mgrs, amount sdkmath.Uint, chain 
 		router = common.NoAddress
 	} else {
 		// get the most secure vault for inbound
-		active, err := mgr.Keeper().GetAsgardVaultsByStatus(ctx, ActiveVault)
+		var active Vaults
+		active, err = mgr.Keeper().GetAsgardVaultsByStatus(ctx, ActiveVault)
 		if err != nil {
 			return common.NoAddress, common.NoAddress, 0, err
 		}
@@ -436,18 +443,19 @@ func quoteOutboundInfo(ctx cosmos.Context, mgr *Mgrs, coin common.Coin) (int64, 
 // calculateMinSwapAmount returns the recommended minimum swap amount The recommended
 // min swap amount is: - MAX(
 //
-//	  outbound_fee(src_chain) * 4,
-//	  outbound_fee(dest_chain) * 4,
-//	  (native_tx_fee_rune * 2) * 10,000 / affiliateBps
-//	)
+//	  outbound_fee(src_chain) + dust_threshold(src_chain),
+//	  outbound_fee(dest_chain) + dust_threshold(dest_chain) converted to src_chain
+//	) * multiplier * (100% + affiliate_bps)
 //
 // The reason the base value is the MAX of the outbound fees of each chain is because if
 // the swap is refunded the input amount will need to cover the outbound fee of the
-// source chain. A 3x buffer is applied because outbound fees can spike quickly, meaning
+// source chain. A multiplier buffer is applied because outbound fees can spike quickly, meaning
 // the original input amount could be less than the new outbound fee. If this happens
 // and the swap is refunded, the refund will fail, and the user will lose the entire
-// input amount.
-func calculateMinSwapAmount(ctx cosmos.Context, mgr *Mgrs, fromAsset, toAsset common.Asset) (cosmos.Uint, error) {
+// input amount. The dust threshold ensures the outbound amount meets the minimum
+// transaction requirements of the destination chain. The affiliate fee multiplier accounts
+// for the fact that affiliate fees are taken out before processing the swap.
+func calculateMinSwapAmount(ctx cosmos.Context, mgr *Mgrs, fromAsset, toAsset common.Asset, totalAffiliateBps sdkmath.Uint) (cosmos.Uint, error) {
 	srcOutboundFee, err := mgr.GasMgr().GetAssetOutboundFee(ctx, fromAsset, false)
 	if err != nil {
 		return cosmos.ZeroUint(), fmt.Errorf("fail to get outbound fee for source chain gas asset %s: %w", fromAsset, err)
@@ -457,10 +465,16 @@ func calculateMinSwapAmount(ctx cosmos.Context, mgr *Mgrs, fromAsset, toAsset co
 		return cosmos.ZeroUint(), fmt.Errorf("fail to get outbound fee for destination chain gas asset %s: %w", toAsset, err)
 	}
 
-	if fromAsset.GetChain().IsTHORChain() && toAsset.GetChain().IsTHORChain() {
-		// If this is a purely THORChain swap, no need to give a 3x buffer since outbound fees do not change
-		// 2x buffer should suffice
-		return srcOutboundFee.Mul(cosmos.NewUint(2)), nil
+	// Add source dust to srcOutboundFee
+	srcDustThreshold := fromAsset.GetChain().DustThreshold()
+	if !srcDustThreshold.IsZero() {
+		srcOutboundFee = srcOutboundFee.Add(srcDustThreshold)
+	}
+
+	// Add destination dust to destOutboundFee
+	destDustThreshold := toAsset.GetChain().DustThreshold()
+	if !destDustThreshold.IsZero() {
+		destOutboundFee = destOutboundFee.Add(destDustThreshold)
 	}
 
 	destInSrcAsset, err := quoteConvertAsset(ctx, mgr, toAsset, destOutboundFee, fromAsset)
@@ -473,7 +487,17 @@ func calculateMinSwapAmount(ctx cosmos.Context, mgr *Mgrs, fromAsset, toAsset co
 		minSwapAmount = destInSrcAsset
 	}
 
+	// Apply multiplier to the final result
 	minSwapAmount = minSwapAmount.Mul(cosmos.NewUint(getQuoteRecommendedMinAmountFeeMultiplier()))
+
+	// Apply affiliate fee multiplier: multiply by (100% + affiliate_bps)
+	// This accounts for the fact that affiliate fees are taken out before processing
+	if !totalAffiliateBps.IsZero() {
+		// Convert basis points to percentage: 10000 bps = 100%
+		// So we need to multiply by (10000 + totalAffiliateBps) / 10000
+		affiliateMultiplier := cosmos.NewUint(10000).Add(totalAffiliateBps)
+		minSwapAmount = minSwapAmount.Mul(affiliateMultiplier).Quo(cosmos.NewUint(10000))
+	}
 
 	return minSwapAmount, nil
 }
@@ -497,7 +521,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 	}
 
 	// error if older height not explicitly requested and latest block older than max lag
-	if req.Height == "" && ctx.BlockTime().Before(time.Now().Add(-config.GetThornode().API.Quote.MaxLag)) {
+	isWasm, _ := ctx.Value(constants.CtxWASMQuery).(bool)
+	if !isWasm && req.Height == "" && ctx.BlockTime().Before(time.Now().Add(-config.GetThornode().API.Quote.MaxLag)) {
 		return nil, fmt.Errorf("refusing quote on node with stale state")
 	}
 
@@ -519,14 +544,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 		return nil, fmt.Errorf("bad amount: %w", err)
 	}
 
-	if amount.LT(fromAsset.Chain.DustThreshold()) {
+	if !fromAsset.IsNative() && amount.LT(fromAsset.Chain.DustThreshold()) {
 		return nil, fmt.Errorf("amount less than dust threshold")
-	}
-
-	// check if the amount is less than the minimum swap amount
-	minSwapAmount, err := calculateMinSwapAmount(ctx, qs.mgr, fromAsset, toAsset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate min swap amount: %w", err)
 	}
 
 	// parse streaming interval
@@ -585,7 +604,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 
 	// if from asset is a trade asset, create fake balance
 	if fromAsset.IsTradeAsset() {
-		thorAddr, err := fromPubkey.GetThorAddress()
+		var thorAddr cosmos.AccAddress
+		thorAddr, err = fromPubkey.GetThorAddress()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get thor address: %w", err)
 		}
@@ -622,7 +642,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 	liquidityToleranceBps := sdkmath.ZeroUint()
 	if len(req.ToleranceBps) > 0 {
 		// validate tolerance basis points
-		toleranceBasisPoints, err := sdkmath.ParseUint(req.ToleranceBps)
+		var toleranceBasisPoints sdkmath.Uint
+		toleranceBasisPoints, err = sdkmath.ParseUint(req.ToleranceBps)
 		if err != nil {
 			return nil, fmt.Errorf("bad tolerance basis points: %w", err)
 		}
@@ -631,7 +652,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 		}
 
 		// convert to a limit of target asset amount assuming zero fees and slip
-		feelessEmit, err := quoteConvertAsset(ctx, qs.mgr, fromAsset, amount, toAsset)
+		var feelessEmit sdkmath.Uint
+		feelessEmit, err = quoteConvertAsset(ctx, qs.mgr, fromAsset, amount, toAsset)
 		if err != nil {
 			return nil, err
 		}
@@ -662,6 +684,12 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 		return nil, fmt.Errorf("bad affiliate params: %w", err)
 	}
 
+	// check if the amount is less than the minimum swap amount
+	minSwapAmount, err := calculateMinSwapAmount(ctx, qs.mgr, fromAsset, toAsset, totalBps)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate min swap amount: %w", err)
+	}
+
 	// always attempt to shorten the to asset to fuzzy match
 	fuzzyToAsset, err := quoteReverseFuzzyAsset(ctx, qs.mgr, toAsset)
 	memoToAsset := toAsset
@@ -688,7 +716,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 
 	// if from asset is a trade asset, create fake balance
 	if fromAsset.IsTradeAsset() {
-		thorAddr, err := fromPubkey.GetThorAddress()
+		var thorAddr cosmos.AccAddress
+		thorAddr, err = fromPubkey.GetThorAddress()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get thor address: %w", err)
 		}
@@ -700,7 +729,8 @@ func (qs queryServer) queryQuoteSwap(ctx cosmos.Context, req *types.QueryQuoteSw
 
 	// if from asset is a secured asset, create fake balance
 	if fromAsset.IsSecuredAsset() {
-		thorAddr, err := fromPubkey.GetThorAddress()
+		var thorAddr cosmos.AccAddress
+		thorAddr, err = fromPubkey.GetThorAddress()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get thor address: %w", err)
 		}

@@ -45,9 +45,33 @@ ldflags = -X gitlab.com/thorchain/thornode/v3/constants.Version=$(VERSION) \
 
 # golang settings
 TEST_PATHS=$(shell go list ./... | grep -v bifrost/tss/go-tss) # Skip compute-intensive tests by default
+
+# Parse test path argument from command line (e.g., "make test ./path")
+ifeq (test,$(firstword $(MAKECMDGOALS)))
+  TEST_PATH_ARG := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  ifneq ($(TEST_PATH_ARG),)
+    # Check if the argument looks like a path (contains /)
+    ifneq ($(findstring /,$(TEST_PATH_ARG)),)
+      # Ensure path starts with ./
+      ifeq ($(filter ./%,$(TEST_PATH_ARG)),)
+        TEST_DIR := ./$(TEST_PATH_ARG)
+      else
+        TEST_DIR := $(TEST_PATH_ARG)
+      endif
+      # Prevent make from treating the path as a target
+      .PHONY: $(TEST_PATH_ARG)
+      $(eval $(TEST_PATH_ARG):;@:)
+    endif
+  endif
+endif
+
 TEST_DIR?=${TEST_PATHS}
 BUILD_FLAGS := -ldflags '$(ldflags)' -tags ${TAG} -trimpath
-TEST_BUILD_FLAGS := -parallel=1 -tags=mocknet
+PARALLELISM ?= 1
+TEST_BUILD_FLAGS := -parallel=$(PARALLELISM) -tags=mocknet
+ifdef RUN
+RUN_FLAG := -run=$(RUN)
+endif
 BINARIES?=./cmd/thornode ./cmd/bifrost ./tools/recover-keyshare-backup
 GOVERSION=$(shell awk '($$1 == "go") { print $$2 }' go.mod)
 
@@ -109,9 +133,9 @@ proto-check-breaking:
 # ------------------------------ Docs ------------------------------
 
 docs-init:
-	@cargo install mdbook --version 0.4.44
+	@cargo install mdbook --version 0.4.52
 	@cargo install mdbook-admonish --version 1.18.0
-	@cargo install mdbook-katex --version 0.9.2
+	@cargo install mdbook-katex --version 0.9.4
 	@cargo install mdbook-embed --version 0.2.0
 	@cd docs && mdbook-admonish install --css-dir theme
 
@@ -147,7 +171,7 @@ format:
 
 lint:
 	@./scripts/lint.sh
-	@./scripts/trunk check --no-fix --upstream origin/develop
+	@./scripts/trunk check --no-fix --show-existing --upstream origin/develop
 
 lint-ci:
 	@./scripts/lint.sh
@@ -169,29 +193,32 @@ test-coverage-sum: test-network-specific
 	@go tool cover -func=coverage.txt
 	@go tool cover -html=coverage.txt -o coverage.html
 
-test: test-network-specific
-	@go test ${TEST_BUILD_FLAGS} ${TEST_DIR}
+test:
+ifeq ($(TEST_DIR),$(TEST_PATHS))
+	@$(MAKE) test-network-specific
+endif
+	@go test ${TEST_BUILD_FLAGS} ${RUN_FLAG} ${TEST_DIR}
 
 test-all: test-network-specific
-	@go test ${TEST_BUILD_FLAGS} "./..."
+	@go test ${TEST_BUILD_FLAGS} ${RUN_FLAG} "./..."
 
 test-go-tss:
-	@go test ${TEST_BUILD_FLAGS} --race "./bifrost/tss/go-tss/..."
+	@go test ${TEST_BUILD_FLAGS} ${RUN_FLAG} --race "./bifrost/tss/go-tss/..."
 
 test-network-specific:
-	@go test -tags stagenet ./common
-	@go test -tags mainnet ./common ./bifrost/pkg/chainclients/utxo/...
-	@go test -tags mocknet ./common ./bifrost/pkg/chainclients/utxo/...
+	@go test -tags stagenet ${RUN_FLAG} ./common
+	@go test -tags mainnet ${RUN_FLAG} ./common ./bifrost/pkg/chainclients/utxo/...
+	@go test -tags mocknet ${RUN_FLAG} ./common ./bifrost/pkg/chainclients/utxo/...
 
 test-race:
-	@go test -race ${TEST_BUILD_FLAGS} ${TEST_DIR}
+	@go test -race ${TEST_BUILD_FLAGS} ${RUN_FLAG} ${TEST_DIR}
 
 # ------------------------------ Regression Tests ------------------------------
 
 test-regression: build-test-regression
 	@docker run --rm ${DOCKER_TTY_ARGS} \
 		-e DEBUG -e RUN -e EXPORT -e TIME_FACTOR -e PARALLELISM -e FAIL_FAST \
-		-e AUTO_UPDATE -e IGNORE_FAILURES -e CI \
+		-e AUTO_UPDATE -e IGNORE_FAILURES -e CI -e UNFILTER_EXPORT \
 		-e UID=$(shell id -u) -e GID=$(shell id -g) \
 		-p 1317:1317 -p 26657:26657 \
 		-v $(shell pwd)/test/regression/mnt:/mnt \
@@ -230,8 +257,9 @@ _test-regression:
 
 test-simulation: build-mocknet reset-mocknet test-simulation-no-reset
 
+STAGES ?= all
 test-simulation-cluster: build-test-simulation build-mocknet-cluster reset-mocknet-cluster
-	@STAGES=all docker run --rm ${DOCKER_TTY_ARGS} \
+	@STAGES=$(STAGES) docker run --rm ${DOCKER_TTY_ARGS} \
 		-e PARALLELISM -e STAGES --network host -w /app \
 		thornode-simtest sh -c 'make _test-simulation'
 
@@ -358,7 +386,8 @@ thorscan-gitlab-push: docker-gitlab-login
 
 events-build:
 	@docker build . -f tools/events/Dockerfile \
-		$(shell sh ./build/docker/semver_tags.sh registry.gitlab.com/thorchain/thornode events-${BRANCH} $(shell cat version))
+		$(shell sh ./build/docker/semver_tags.sh registry.gitlab.com/thorchain/thornode events-${BRANCH} $(shell cat version)) \
+		--build-arg TAG=$(BUILDTAG)
 
 events-gitlab-push: docker-gitlab-login
 	@./build/docker/semver_tags.sh registry.gitlab.com/thorchain/thornode events-${BRANCH} $(shell cat version) \

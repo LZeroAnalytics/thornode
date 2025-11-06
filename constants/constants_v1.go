@@ -117,6 +117,10 @@ func NewConstantValue() *ConstantVals {
 			TradeAccountsDepositEnabled:         1,
 			EVMDisableContractWhitelist:         0,                  // enable/disable contract whitelist
 			OperationalVotesMin:                 3,                  // Minimum node votes to set an Operational Mimir
+			MemolessTxnTTL:                      3600,               // number of blocks before a memoless txn expires
+			MemolessTxnRefCount:                 99_999,             // max number of reference ids per chain
+			MemolessTxnCost:                     0,                  // additional cost in RUNE to register a memoless txn (operational mimir)
+			MemolessTxnMaxUse:                   1,                  // maximum times a reference id can be utilized before refunding (operational mimir)
 			L1SlipMinBps:                        0,                  // Minimum L1 asset swap fee in basis points
 			TradeAccountsSlipMinBps:             0,                  // Minimum trade asset swap fee in basis points
 			SecuredAssetSlipMinBps:              5,                  // Minimum secured asset swap fee in basis points
@@ -129,6 +133,7 @@ func NewConstantValue() *ConstantVals {
 			SaversEjectInterval:                 0,                  // number of blocks for savers check, disabled if zero
 			SystemIncomeBurnRateBps:             1,                  // burn 1bps (0.01%) RUNE of all system income per ADR 17
 			DevFundSystemIncomeBps:              500,                // allocate 500bps (5%) RUNE of all system income to dev fund per ADR 18
+			MarketingFundSystemIncomeBps:        500,                // allocate 500bps (5%) RUNE of all system income to marketing fund per ADR 21
 			PendulumAssetsBasisPoints:           10_000,             // Incentive curve adjustment lever to proportionally underestimate or overestimate Assets needing to be secured.
 			PendulumUseEffectiveSecurity:        0,                  // If 1, use the effective security bond (the bond sacrificable to seize L1 Assets) as the securing bond for which to target double the value of the secured Assets. If 0, instead use the whole (rewards-receiving) total effective bond.
 			PendulumUseVaultAssets:              0,                  // If 1. use the L1 Assets in the vaults (the Assets seizable by the lower-bond 2/3rds of nodes in each vault) as the Assets to be secured.  If 0, instead use only the L1 Assets in pools, ignoring the L1 Assets in for instance streaming swaps, oversolvencies, and Trade/Bridge Assets.
@@ -147,14 +152,16 @@ func NewConstantValue() *ConstantVals {
 			TCYUnstakingHalt:                    1,                  // enable/disable tcy unstaking
 			TCYClaimingHalt:                     1,                  // enable/disable tcy claiming
 			ReserveMaxCap:                       0,                  // maximum reserve balance before EmissionCurve is overridden, 0 = disabled
+			MaxDepositTxIDRetries:               100,                // maximum retries for deposit txid auto-increment to avoid collisions
 		},
 		boolValues: map[ConstantName]bool{
 			StrictBondLiquidityRatio: true,
 		},
 		stringValues: map[ConstantName]string{
-			DefaultPoolStatus:  "Staged",
-			DevFundAddress:     "thor1d8c0wv4y72kmlytegjmgx825xwumt9qt5xe07k", // dev fund address for ADR 18,  initially set via to address pre-funded 1M by TC treasury
-			RequiredPriceFeeds: "ATOM,AVAX,BCH,BNB,BTC,DOGE,ETH,LTC,RUNE,SOL,TRX,USDC,USDT,XRP",
+			DefaultPoolStatus:    "Staged",
+			DevFundAddress:       "thor1d8c0wv4y72kmlytegjmgx825xwumt9qt5xe07k", // dev fund address for ADR 18,  initially set via to address pre-funded 1M by TC treasury
+			MarketingFundAddress: "thor1usj8cqjmjea32csxn5fma96ffeulln40gyrahn", // marketing fund address for ADR 21
+			RequiredPriceFeeds:   "ATOM,AVAX,BCH,BNB,BTC,DOGE,ETH,LTC,RUNE,SOL,TRX,USDC,USDT,XRP",
 		},
 	}
 }

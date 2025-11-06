@@ -4,7 +4,7 @@ info:
     email: devs@thorchain.org
   description: Thornode REST API.
   title: Thornode API
-  version: 3.11.0
+  version: 3.12.0
 servers:
 - url: /
 paths:
@@ -2261,6 +2261,123 @@ paths:
           description: OK
       tags:
       - Mimir
+  /thorchain/memo/{asset}/{reference}:
+    get:
+      description: Returns the memoless transaction memo for the provided asset and
+        reference number.
+      operationId: referenceMemo
+      parameters:
+      - description: "optional block height, defaults to current tip"
+        explode: true
+        in: query
+        name: height
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+        style: form
+      - explode: false
+        in: path
+        name: asset
+        required: true
+        schema:
+          example: BTC.BTC
+          type: string
+        style: simple
+      - description: the reference number to lookup
+        explode: false
+        in: path
+        name: reference
+        required: true
+        schema:
+          example: "20002"
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceMemoResponse'
+          description: OK
+      tags:
+      - Reference Memos
+  /thorchain/memo/{hash}:
+    get:
+      description: Returns the memoless transaction memo for the provided reference
+        hash.
+      operationId: referenceMemoByHash
+      parameters:
+      - description: "optional block height, defaults to current tip"
+        explode: true
+        in: query
+        name: height
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+        style: form
+      - explode: false
+        in: path
+        name: hash
+        required: true
+        schema:
+          example: CF524818D42B63D25BBA0CCC4909F127CAA645C0F9CD07324F2824CC151A64C7
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceMemoResponse'
+          description: OK
+      tags:
+      - Reference Memos
+  /thorchain/memo/check/{asset}/{amount}:
+    get:
+      description: Pre-flight check for memoless transactions. Returns what reference
+        would be extracted from the amount and whether it's available for registration.
+      operationId: referenceMemoCheck
+      parameters:
+      - description: "optional block height, defaults to current tip"
+        explode: true
+        in: query
+        name: height
+        required: false
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+        style: form
+      - explode: false
+        in: path
+        name: asset
+        required: true
+        schema:
+          example: BTC.BTC
+          type: string
+        style: simple
+      - description: the transaction amount in base units to check
+        explode: false
+        in: path
+        name: amount
+        required: true
+        schema:
+          example: "20002"
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceMemoPreflightResponse'
+          description: OK
+      tags:
+      - Reference Memos
   /thorchain/quote/swap:
     get:
       description: Provide a quote estimate for the provided swap.
@@ -2584,27 +2701,29 @@ components:
     Pool:
       example:
         synth_units: "0"
-        savers_fill_bps: "4500"
         loan_cr: "123456"
         savers_depth: "199998"
-        savers_units: "199998"
         derived_depth_bps: "123456"
         balance_asset: "3197744873"
         synth_supply: "0"
+        asset_tor_price: "123456"
+        synth_mint_paused: true
+        balance_rune: "13460619152985"
+        pool_units: "14694928607473"
+        short_code: b
+        volume_rune: "123456"
+        volume_asset: "123456"
+        savers_fill_bps: "4500"
+        savers_units: "199998"
         savers_capacity_remaining: "1000"
         loan_collateral_remaining: "123456"
         trading_halted: false
-        asset_tor_price: "123456"
-        synth_mint_paused: true
         pending_inbound_rune: "464993836"
         decimals: 6
         LP_units: "14694928607473"
         loan_collateral: "123456"
-        balance_rune: "13460619152985"
         asset: BTC.BTC
-        pool_units: "14694928607473"
         synth_supply_remaining: "123456"
-        short_code: b
         status: Available
         pending_inbound_asset: "101713319"
       properties:
@@ -2699,6 +2818,14 @@ components:
           description: indicates if the pool can be used for swaps
           example: false
           type: boolean
+        volume_asset:
+          description: 24h volume in asset
+          example: "123456"
+          type: string
+        volume_rune:
+          description: 24h volume in rune
+          example: "123456"
+          type: string
       required:
       - LP_units
       - asset
@@ -3461,6 +3588,9 @@ components:
       type: object
     VaultInfo:
       example:
+        membership:
+        - membership
+        - membership
         routers:
         - chain: ETH
           router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
@@ -3478,6 +3608,11 @@ components:
         routers:
           items:
             $ref: '#/components/schemas/VaultRouter'
+          type: array
+        membership:
+          description: the list of node public keys which are members of the vault
+          items:
+            type: string
           type: array
       required:
       - pub_key
@@ -5466,14 +5601,20 @@ components:
     VaultPubkeysResponse:
       example:
         yggdrasil:
-        - routers:
+        - membership:
+          - membership
+          - membership
+          routers:
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           pub_key: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
           pub_key_eddsa: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
-        - routers:
+        - membership:
+          - membership
+          - membership
+          routers:
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           - chain: ETH
@@ -5481,14 +5622,20 @@ components:
           pub_key: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
           pub_key_eddsa: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
         inactive:
-        - routers:
+        - membership:
+          - membership
+          - membership
+          routers:
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           pub_key: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
           pub_key_eddsa: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
-        - routers:
+        - membership:
+          - membership
+          - membership
+          routers:
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           - chain: ETH
@@ -5496,14 +5643,20 @@ components:
           pub_key: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
           pub_key_eddsa: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
         asgard:
-        - routers:
+        - membership:
+          - membership
+          - membership
+          routers:
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           pub_key: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
           pub_key_eddsa: thorpub1addwnpepq068dr0x7ue973drmq4eqmzhcq3650n7nx5fhgn9gl207luxp6vaklu52tc
-        - routers:
+        - membership:
+          - membership
+          - membership
+          routers:
           - chain: ETH
             router: 0x3624525075b88B24ecc29CE226b0CEc1fFcB6976
           - chain: ETH
@@ -7209,6 +7362,95 @@ components:
       - streaming_swap_seconds
       - total_repay_seconds
       - warning
+      type: object
+    ReferenceMemoResponse:
+      example:
+        reference: "20002"
+        registered_by: thor1zupk5lmc84r2dh738a9g3zscavannjy3nzplwt
+        memo: =:ETH.ETH:0x1c7b17362c84287bd1184447e6dfeaf920c31bbe:1000:0:100
+        asset: BTC.BTC
+        registration_hash: AF524818D42B63D25BBA0CCC4909F127CAA645C0F9CD07324F2824CC151A64C8
+        height: "12345678"
+      properties:
+        asset:
+          description: the asset for which this reference memo is valid
+          example: BTC.BTC
+          type: string
+        memo:
+          description: the original memo that was registered for memoless transactions
+          example: =:ETH.ETH:0x1c7b17362c84287bd1184447e6dfeaf920c31bbe:1000:0:100
+          type: string
+        reference:
+          description: the reference number used to identify this memo
+          example: "20002"
+          type: string
+        height:
+          description: the block height when this reference memo was registered
+          example: "12345678"
+          type: string
+        registration_hash:
+          description: the transaction hash where this reference memo was registered
+          example: AF524818D42B63D25BBA0CCC4909F127CAA645C0F9CD07324F2824CC151A64C8
+          type: string
+        registered_by:
+          description: the address that registered this reference memo
+          example: thor1zupk5lmc84r2dh738a9g3zscavannjy3nzplwt
+          type: string
+      required:
+      - asset
+      - height
+      - memo
+      - reference
+      - registered_by
+      - registration_hash
+      type: object
+    ReferenceMemoPreflightResponse:
+      example:
+        reference: "20002"
+        usage_count: "0"
+        expires_at: "0"
+        available: true
+        can_register: true
+        memo: =:ETH.ETH:0x1c7b17362c84287bd1184447e6dfeaf920c31bbe
+        max_use: "0"
+      properties:
+        reference:
+          description: the reference ID that would be generated from the amount
+          example: "20002"
+          type: string
+        available:
+          description: whether this reference is currently available (not registered
+            or expired)
+          example: true
+          type: boolean
+        can_register:
+          description: whether a new registration can be made with this reference
+          example: true
+          type: boolean
+        expires_at:
+          description: block height when current registration expires (0 if available)
+          example: "0"
+          type: string
+        memo:
+          description: the currently registered memo (only present if not available)
+          example: =:ETH.ETH:0x1c7b17362c84287bd1184447e6dfeaf920c31bbe
+          type: string
+        usage_count:
+          description: the number of times this reference has been used
+          example: "0"
+          type: string
+        max_use:
+          description: the maximum number of times this reference can be used (0 =
+            unlimited)
+          example: "0"
+          type: string
+      required:
+      - available
+      - can_register
+      - expires_at
+      - max_use
+      - reference
+      - usage_count
       type: object
     Ping:
       example:

@@ -35,7 +35,7 @@ func (h DepositHandler) Run(ctx cosmos.Context, m cosmos.Msg) (*cosmos.Result, e
 		ctx.Logger().Error("MsgDeposit failed validation", "error", err)
 		return nil, err
 	}
-	result, err := h.handle(ctx, *msg)
+	result, err := h.handle(ctx, *msg, 0)
 	if err != nil {
 		ctx.Logger().Error("fail to process MsgDeposit", "error", err)
 		return nil, err
@@ -62,7 +62,7 @@ func (h DepositHandler) validateV3_0_0(ctx cosmos.Context, msg MsgDeposit) error
 	return nil
 }
 
-func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Result, error) {
+func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit, idx uint16) (*cosmos.Result, error) {
 	if h.mgr.Keeper().IsChainHalted(ctx, common.THORChain) {
 		return nil, fmt.Errorf("unable to use MsgDeposit while THORChain is halted")
 	}
@@ -96,15 +96,28 @@ func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Resu
 
 	hash := tmtypes.Tx(ctx.TxBytes()).Hash()
 	txID, err := common.NewTxID(fmt.Sprintf("%X", hash))
+	if idx > 0 {
+		ctx.Logger().Info("auto-increment txid", "idx", idx, "hash", fmt.Sprintf("%X", hash))
+		txID, err = common.NewTxID(fmt.Sprintf("%X-%d", hash, idx))
+		if err != nil {
+			return nil, fmt.Errorf("fail to get tx hash: %w", err)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("fail to get tx hash: %w", err)
 	}
 	existingVoter, err := h.mgr.Keeper().GetObservedTxInVoter(ctx, txID)
 	if err != nil {
-		return nil, fmt.Errorf("fail to get existing voter")
+		ctx.Logger().Error("GetObservedTxInVoter error", "idx", idx, "txID", txID.String(), "error", err)
+		return nil, fmt.Errorf("fail to get existing voter: %w", err)
 	}
 	if len(existingVoter.Txs) > 0 {
-		return nil, fmt.Errorf("txid: %s already exist", txID.String())
+		ctx.Logger().Info("txid collision detected, retrying with auto-incremented idx", "txID", txID.String(), "existingTxs", len(existingVoter.Txs), "idx", idx)
+		maxRetries := uint16(h.mgr.Keeper().GetConfigInt64(ctx, constants.MaxDepositTxIDRetries))
+		if idx >= maxRetries {
+			return nil, fmt.Errorf("txid: %s already exist after max retries (%d)", txID.String(), maxRetries)
+		}
+		return h.handle(ctx, msg, idx+1)
 	}
 	from, err := common.NewAddress(msg.GetSigners()[0].String())
 	if err != nil {
@@ -146,7 +159,7 @@ func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Resu
 	coinsInMsg := msg.Coins
 	if !coinsInMsg.IsEmpty() && !coinsInMsg[0].Asset.IsTradeAsset() && !coinsInMsg[0].Asset.IsSecuredAsset() {
 		// send funds to target module
-		err := h.mgr.Keeper().SendFromAccountToModule(ctx, msg.GetSigners()[0], targetModule, msg.Coins)
+		err = h.mgr.Keeper().SendFromAccountToModule(ctx, msg.GetSigners()[0], targetModule, msg.Coins)
 		if err != nil {
 			return nil, err
 		}
@@ -185,9 +198,9 @@ func (h DepositHandler) handle(ctx cosmos.Context, msg MsgDeposit) (*cosmos.Resu
 
 	// if its a swap, send it to our queue for processing later
 	if isSwap {
-		msg, ok := m.(*MsgSwap)
+		swapMsg, ok := m.(*MsgSwap)
 		if ok {
-			if err := h.addSwap(ctx, *msg); err != nil {
+			if err = h.addSwap(ctx, *swapMsg); err != nil {
 				if refundErr := refundTx(ctx, txIn, h.mgr, CodeSwapFail, err.Error(), ""); refundErr != nil {
 					ctx.Logger().Error("fail to refund swap", "error", refundErr)
 					// swallow the error here

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/blang/semver"
 )
@@ -22,9 +21,6 @@ var (
 
 var SWVersion, _ = semver.Make(Version)
 
-// ThorchainBlockTime Block time of THORChain
-var ThorchainBlockTime = 5 * time.Second
-
 // max basis points
 const MaxBasisPts = uint64(10_000)
 
@@ -35,6 +31,9 @@ const MaxMemoSize = 250
 // StreamingSwapMinBPFee multiplier. This is used to allow decimal points for
 // streaming swap math
 const StreamingSwapMinBPFeeMulti = int64(100)
+
+// "width" of a volume bucket (15min)
+const VolumeBucketSeconds = int64(900)
 
 // used to preserve precision when determining the dollar price of rune.
 const DollarMulti = 1e9
@@ -59,6 +58,7 @@ const (
 	CtxLoanToAddress  contextKey = "loan-toaddress"
 	CtxObservedTx     contextKey = "observed-tx"
 	CtxSimulationMode contextKey = "simulation-mode"
+	CtxWASMQuery      contextKey = "wasm-query"
 )
 
 // Permitted characters in Mimirs

@@ -1,7 +1,6 @@
 package pubkeymanager
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -71,16 +70,7 @@ func NewPubKeyManager(bridge thorclient.ThorchainBridge, m *metrics.Metrics) (*P
 
 // Start to poll pubkeys from thorchain
 func (pkm *PubKeyManager) Start() error {
-	pubkeys, err := pkm.getPubkeys()
-	if err != nil {
-		return fmt.Errorf("fail to get pubkeys from thorchain: %w", err)
-	}
-	for _, pk := range pubkeys {
-		pkm.AddPubKey(pk.PubKey, false, pk.Algo)
-	}
-
-	// get smart contract address from THORNode , and update it's internal
-	pkm.updateContractAddresses(pubkeys)
+	pkm.fetchPubKeys(false)
 	go pkm.updatePubKeys()
 	return nil
 }
@@ -250,23 +240,20 @@ func (pkm *PubKeyManager) fetchPubKeys(prune bool) {
 		pkm.logger.Error().Err(err).Msg("fail to get pubkeys from THORChain")
 		return
 	}
+	nodePubKey := pkm.GetNodePubKey(common.SigningAlgoSecp256k1)
 	var pubkeys common.PubKeys
 	for _, pk := range addressPairs {
-		pkm.AddPubKey(pk.PubKey, false, pk.Algo)
+		signer := false
+		for _, member := range pk.Membership {
+			if member.Equals(nodePubKey) {
+				signer = true
+				break
+			}
+		}
+		pkm.AddPubKey(pk.PubKey, signer, pk.Algo)
 		pubkeys = append(pubkeys, pk.PubKey)
 	}
 	pkm.updateContractAddresses(addressPairs)
-	vaults, err := pkm.bridge.GetAsgards()
-	if err != nil {
-		return
-	}
-
-	for _, vault := range vaults {
-		if vault.GetMembership().Contains(pkm.GetNodePubKey(common.SigningAlgoSecp256k1)) {
-			pkm.AddPubKey(vault.PubKey, true, common.SigningAlgoSecp256k1)
-			pubkeys = append(pubkeys, vault.PubKey)
-		}
-	}
 
 	if prune {
 		pkm.rwMutex.Lock()
@@ -316,6 +303,11 @@ func (pkm *PubKeyManager) IsValidPoolAddress(addr string, chain common.Chain) (b
 	defer pkm.rwMutex.RUnlock()
 
 	for _, pk := range pkm.pubkeys {
+		// skip pubkeys with a different algo than the chain
+		if chain.GetSigningAlgo() != pk.Algo {
+			continue
+		}
+
 		ok, cpi := matchAddress(addr, chain, pk.PubKey)
 		if ok {
 			return ok, cpi
@@ -354,11 +346,16 @@ func (pkm *PubKeyManager) GetContracts(chain common.Chain) []common.Address {
 	pkm.rwMutex.RLock()
 	defer pkm.rwMutex.RUnlock()
 	var result []common.Address
+	seen := map[common.Address]bool{} // avoid duplicates of router address
 	for _, pk := range pkm.pubkeys {
 		if len(pk.Contracts) == 0 {
 			continue
 		}
 		if addr, ok := pk.Contracts[chain]; ok {
+			if seen[addr] {
+				continue
+			}
+			seen[addr] = true
 			result = append(result, addr)
 		}
 	}

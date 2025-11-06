@@ -182,6 +182,9 @@
     "genutil": {
       "gen_txs": []
     },
+    "scheduler": {
+      "schedules": []
+    },
     "thorchain": {
       "POL": {
         "rune_deposited": "0",
@@ -240,6 +243,7 @@
       "outbound_fee_spent_rune": [],
       "outbound_fee_withheld_rune": [],
       "pools": null,
+      "reference_memos": [],
       "reserve_contributors": null,
       "rune_pool": {
         "pool_units": "0",

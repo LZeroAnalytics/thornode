@@ -37,26 +37,28 @@ import (
 
 // Endpoint urls
 const (
-	AuthAccountEndpoint      = "/cosmos/auth/v1beta1/accounts"
-	BroadcastTxsEndpoint     = "/"
-	ConstantsEndpoint        = "/thorchain/constants"
-	KeygenEndpoint           = "/thorchain/keygen"
-	KeysignEndpoint          = "/thorchain/keysign"
-	LastBlockEndpoint        = "/thorchain/lastblock"
-	NodeAccountEndpoint      = "/thorchain/node"
-	NodeAccountsEndpoint     = "/thorchain/nodes"
-	SignerMembershipEndpoint = "/thorchain/vaults/%s/signers"
-	StatusEndpoint           = "/status"
-	VaultEndpoint            = "/thorchain/vault/%s"
-	AsgardVault              = "/thorchain/vaults/asgard"
-	PubKeysEndpoint          = "/thorchain/vaults/pubkeys"
-	ThorchainConstants       = "/thorchain/constants"
-	RagnarokEndpoint         = "/thorchain/ragnarok"
-	MimirEndpoint            = "/thorchain/mimir"
-	ChainVersionEndpoint     = "/thorchain/version"
-	InboundAddressesEndpoint = "/thorchain/inbound_addresses"
-	PoolsEndpoint            = "/thorchain/pools"
-	THORNameEndpoint         = "/thorchain/thorname/%s"
+	AuthAccountEndpoint         = "/cosmos/auth/v1beta1/accounts"
+	BroadcastTxsEndpoint        = "/"
+	ConstantsEndpoint           = "/thorchain/constants"
+	KeygenEndpoint              = "/thorchain/keygen"
+	KeysignEndpoint             = "/thorchain/keysign"
+	LastBlockEndpoint           = "/thorchain/lastblock"
+	NodeAccountEndpoint         = "/thorchain/node"
+	NodeAccountsEndpoint        = "/thorchain/nodes"
+	SignerMembershipEndpoint    = "/thorchain/vaults/%s/signers"
+	StatusEndpoint              = "/status"
+	VaultEndpoint               = "/thorchain/vault/%s"
+	AsgardVault                 = "/thorchain/vaults/asgard"
+	PubKeysEndpoint             = "/thorchain/vaults/pubkeys"
+	ThorchainConstants          = "/thorchain/constants"
+	RagnarokEndpoint            = "/thorchain/ragnarok"
+	MimirEndpoint               = "/thorchain/mimir"
+	ChainVersionEndpoint        = "/thorchain/version"
+	InboundAddressesEndpoint    = "/thorchain/inbound_addresses"
+	PoolsEndpoint               = "/thorchain/pools"
+	THORNameEndpoint            = "/thorchain/thorname/%s"
+	ReferenceMemoEndpoint       = "/thorchain/memo/%s/%s"
+	ReferenceMemoByHashEndpoint = "/thorchain/memo/%s"
 )
 
 // thorchainBridge will be used to send tx to THORChain
@@ -107,10 +109,13 @@ type ThorchainBridge interface {
 	GetLastObservedInHeight(chain common.Chain) (int64, error)
 	GetLastSignedOutHeight(chain common.Chain) (int64, error)
 	Broadcast(msgs ...sdk.Msg) (common.TxID, error)
+	BroadcastWithBlocking(msgs ...sdk.Msg) (common.TxID, error)
 	GetKeysign(blockHeight int64, pk string) (types.TxOut, error)
 	GetNodeAccount(string) (*stypes.NodeAccount, error)
 	GetNodeAccounts() ([]*stypes.NodeAccount, error)
 	GetKeygenBlock(int64, string) (stypes.KeygenBlock, error)
+	GetReferenceMemo(chain common.Chain, ref string) (string, error)
+	GetReferenceMemoByTxHash(hash string) (string, error)
 }
 
 // httpResponseCache used for caching HTTP responses for less frequent querying
@@ -224,12 +229,13 @@ func (b *thorchainBridge) get(url string) ([]byte, int, error) {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to GET from thorchain: %w", err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			b.logger.Error().Err(err).Msg("failed to close response body")
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			b.logger.Error().Err(closeErr).Msg("failed to close response body")
 		}
 	}()
 
-	buf, err := io.ReadAll(resp.Body)
+	var buf []byte
+	buf, err = io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return buf, resp.StatusCode, errors.New("Status code: " + resp.Status + " returned")
 	}
@@ -373,13 +379,17 @@ func (b *thorchainBridge) GetInboundOutbound(txIns common.ObservedTxs) (common.O
 		if vaultFromAddress {
 			inOutboundArray = outbound.Contains(tx)
 		}
+
+		// cancels have to/from the same vault with no memo
+		isCancelTransaction := tx.Tx.ToAddress.Equals(tx.Tx.FromAddress) && tx.Tx.Memo == ""
+
 		// for consolidate UTXO tx, both From & To address will be the asgard address
 		// thus here we need to make sure that one add to inbound , the other add to outbound
 		switch {
 		case !vaultToAddress && !vaultFromAddress:
 			// Neither ToAddress nor FromAddress matches obAddr, so drop it.
 			b.logger.Error().Msgf("chain (%s) tx (%s) observedaddress (%s) does not match its toaddress (%s) or fromaddress (%s)", tx.Tx.Chain, tx.Tx.ID, obAddr, tx.Tx.ToAddress, tx.Tx.FromAddress)
-		case vaultToAddress && !inInboundArray:
+		case vaultToAddress && !inInboundArray && !isCancelTransaction:
 			inbound = append(inbound, tx)
 		case vaultFromAddress && !inOutboundArray:
 			outbound = append(outbound, tx)
@@ -641,11 +651,16 @@ func (b *thorchainBridge) GetPubKeys() ([]PubKeyContractAddressPair, error) {
 	}
 	var addressPairs []PubKeyContractAddressPair
 	for _, v := range append(result.Asgard, result.Inactive...) {
+		membership := []common.PubKey{}
+		for _, item := range v.Membership {
+			membership = append(membership, common.PubKey(item))
+		}
 		if v.PubKeyEddsa != nil && *v.PubKeyEddsa != "" {
 			kp := PubKeyContractAddressPair{
-				PubKey:    common.PubKey(*v.PubKeyEddsa),
-				Contracts: make(map[common.Chain]common.Address),
-				Algo:      common.SigningAlgoEd25519,
+				PubKey:     common.PubKey(*v.PubKeyEddsa),
+				Contracts:  make(map[common.Chain]common.Address),
+				Algo:       common.SigningAlgoEd25519,
+				Membership: membership,
 			}
 			for _, item := range v.Routers {
 				kp.Contracts[common.Chain(*item.Chain)] = common.Address(*item.Router)
@@ -653,9 +668,10 @@ func (b *thorchainBridge) GetPubKeys() ([]PubKeyContractAddressPair, error) {
 			addressPairs = append(addressPairs, kp)
 		}
 		kp := PubKeyContractAddressPair{
-			PubKey:    common.PubKey(v.PubKey),
-			Contracts: make(map[common.Chain]common.Address),
-			Algo:      common.SigningAlgoSecp256k1,
+			PubKey:     common.PubKey(v.PubKey),
+			Contracts:  make(map[common.Chain]common.Address),
+			Algo:       common.SigningAlgoSecp256k1,
+			Membership: membership,
 		}
 		for _, item := range v.Routers {
 			kp.Contracts[common.Chain(*item.Chain)] = common.Address(*item.Router)
@@ -799,9 +815,10 @@ func (b *thorchainBridge) GetMimirWithRef(template, ref string) (int64, error) {
 
 // PubKeyContractAddressPair is an entry to map pubkey and contract addresses
 type PubKeyContractAddressPair struct {
-	PubKey    common.PubKey
-	Contracts map[common.Chain]common.Address
-	Algo      common.SigningAlgo
+	PubKey     common.PubKey
+	Contracts  map[common.Chain]common.Address
+	Algo       common.SigningAlgo
+	Membership []common.PubKey
 }
 
 // GetContractAddress retrieve the contract address from asgard
@@ -877,4 +894,38 @@ func (b *thorchainBridge) GetTHORName(name string) (stypes.THORName, error) {
 		return stypes.THORName{}, fmt.Errorf("fail to unmarshal THORNames from json: %w", err)
 	}
 	return tn, nil
+}
+
+// GetReferenceMemo takes a chain and reference id and gets the memo
+func (b *thorchainBridge) GetReferenceMemo(chain common.Chain, ref string) (string, error) {
+	p := fmt.Sprintf(ReferenceMemoEndpoint, chain.String(), ref)
+	buf, s, err := b.getWithPath(p)
+	if err != nil {
+		return "", fmt.Errorf("fail to get reference memo: %w", err)
+	}
+	if s != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", s)
+	}
+	var r stypes.ReferenceMemo
+	if err := json.Unmarshal(buf, &r); err != nil { // nolint
+		return "", fmt.Errorf("fail to unmarshal reference memo from json: %w", err)
+	}
+	return r.Memo, nil
+}
+
+// GetReferenceMemoByTxHash takes a chain and reference id and gets the memo
+func (b *thorchainBridge) GetReferenceMemoByTxHash(hash string) (string, error) {
+	p := fmt.Sprintf(ReferenceMemoByHashEndpoint, hash)
+	buf, s, err := b.getWithPath(p)
+	if err != nil {
+		return "", fmt.Errorf("fail to get reference memo: %w", err)
+	}
+	if s != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", s)
+	}
+	var r stypes.ReferenceMemo
+	if err := json.Unmarshal(buf, &r); err != nil { // nolint
+		return "", fmt.Errorf("fail to unmarshal reference memo from json: %w", err)
+	}
+	return r.Memo, nil
 }

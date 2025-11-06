@@ -65,7 +65,11 @@ func (vm *SwapQueueVCUR) FetchQueue(ctx cosmos.Context) (swapItems, error) { // 
 					// last swap must be in the past
 					continue // skip
 				}
-				if (ctx.BlockHeight()-swp.LastHeight)%int64(swp.Interval) != 0 {
+				interval := swp.Interval
+				if interval == 0 {
+					interval = 1
+				}
+				if (ctx.BlockHeight()-swp.LastHeight)%int64(interval) != 0 {
 					continue // skip
 				}
 				if vm.k.IsTradingHalt(ctx, &msg) {
@@ -150,7 +154,8 @@ func (vm *SwapQueueVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 				}
 			} else {
 				// Should not refund a failed preferred asset swap, the RUNE is still in the AffiliateCollector module
-				affColAddress, err := mgr.Keeper().GetModuleAddress(AffiliateCollectorName)
+				var affColAddress common.Address
+				affColAddress, err = mgr.Keeper().GetModuleAddress(AffiliateCollectorName)
 				if err != nil {
 					ctx.Logger().Error("failed to retrieve AffiliateCollector module address", "error", err)
 				}
@@ -160,7 +165,7 @@ func (vm *SwapQueueVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 					// clean up failed preferred asset swap
 					runeAmt := pick.msg.Tx.Coins[0].Amount
 					memo := pick.msg.Tx.Memo
-					if err := vm.cleanupFailedPreferredAssetSwap(ctx, mgr, memo, runeAmt); err != nil {
+					if err = vm.cleanupFailedPreferredAssetSwap(ctx, mgr, memo, runeAmt); err != nil {
 						ctx.Logger().Error("failed to cleanup failed preferred asset swap", "error", err)
 					}
 				}
@@ -183,7 +188,10 @@ func (vm *SwapQueueVCUR) EndBlock(ctx cosmos.Context, mgr Manager) error {
 			}
 		}
 
-		if pick.msg.IsLegacyStreaming() {
+		// Only track streaming swap state for actual streaming swaps (not limit swaps)
+		// Limit swaps with streaming parameters should execute once and complete,
+		// not persist state across blocks which causes the hollowed-out record bug.
+		if pick.msg.IsLegacyStreaming() && !pick.msg.IsLimitSwap() {
 			swp, err = vm.k.GetStreamingSwap(ctx, pick.msg.Tx.ID)
 			if err != nil {
 				ctx.Logger().Error("fail to fetch streaming swap", "error", err)
@@ -279,7 +287,8 @@ func (vm *SwapQueueVCUR) cleanupFailedPreferredAssetSwap(ctx cosmos.Context, mgr
 		return fmt.Errorf("failed to get thorname from memo: %s", memo)
 	}
 	if tn, err := vm.k.GetTHORName(ctx, name); err == nil {
-		affCol, err := mgr.Keeper().GetAffiliateCollector(ctx, tn.Owner)
+		var affCol AffiliateFeeCollector
+		affCol, err = mgr.Keeper().GetAffiliateCollector(ctx, tn.Owner)
 		if err != nil {
 			return fmt.Errorf("failed to get affiliate collector record: %w", err)
 		} else {

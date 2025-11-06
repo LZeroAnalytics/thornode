@@ -24,7 +24,7 @@ import (
 type SwapActor struct {
 	Actor
 
-	account *User
+	user *User
 
 	// starting balances
 	from        common.Asset
@@ -128,13 +128,13 @@ func (a *SwapActor) acquireUser(config *OpConfig) OpResult {
 		}
 
 		// set acquired account and amounts in state context
-		a.account = user
+		a.user = user
 
 		break
 	}
 
 	// continue if we acquired a user
-	if a.account != nil {
+	if a.user != nil {
 		a.Log().Info().Msg("acquired user")
 		return OpResult{
 			Continue: true,
@@ -169,15 +169,15 @@ func (a *SwapActor) getQuote(config *OpConfig) OpResult {
 		}
 	}
 
-	// store expected range to fail if received amount is outside 5% tolerance
+	// store expected range to fail if received amount is outside 10% tolerance
 	quoteOut := sdkmath.NewUintFromString(quote.ExpectedAmountOut)
 	tolerance := quoteOut.QuoUint64(10)
 	if quote.Fees.Outbound != nil {
 		outboundFee := sdkmath.NewUintFromString(*quote.Fees.Outbound)
 		quoteOut = quoteOut.Add(outboundFee)
 
-		// handle 2x gas rate fluctuation (add 1x outbound fee to tolerance)
-		tolerance = tolerance.Add(outboundFee)
+		// handle 3x gas rate fluctuation (add 2x outbound fee to tolerance)
+		tolerance = tolerance.Add(outboundFee.MulUint64(2))
 	}
 	a.minExpected = quoteOut.Sub(tolerance)
 	a.maxExpected = quoteOut.Add(tolerance)
@@ -212,7 +212,7 @@ func (a *SwapActor) sendSwap(config *OpConfig) OpResult {
 		Memo:      memo,
 	}
 
-	client := a.account.ChainClients[a.from.Chain]
+	client := a.user.ChainClients[a.from.Chain]
 
 	// sign transaction
 	signed, err := client.SignTx(tx)
@@ -272,7 +272,7 @@ func (a *SwapActor) sendTokenSwap(config *OpConfig) OpResult {
 		Args:     []interface{}{eRouterAddr, tokenAmount.BigInt()},
 	}
 
-	iClient := a.account.ChainClients[a.from.Chain]
+	iClient := a.user.ChainClients[a.from.Chain]
 	client, ok := iClient.(*evm.Client)
 	if !ok {
 		a.Log().Fatal().Msg("failed to get evm client")
@@ -384,6 +384,14 @@ func (a *SwapActor) verifyOutbound(config *OpConfig) OpResult {
 		}
 	}
 
+	// verify action is not refund
+	if strings.HasPrefix(*details.Actions[0].Memo, "REFUND:") {
+		return OpResult{
+			Error:  fmt.Errorf("expected action to not be a refund"),
+			Finish: true,
+		}
+	}
+
 	// verify outbound amount + max gas within expected range
 	action := details.Actions[0]
 	out := details.OutTxs[0]
@@ -404,7 +412,7 @@ func (a *SwapActor) verifyOutbound(config *OpConfig) OpResult {
 	}
 
 	// retrieve L1 balance
-	toAcct, err := a.account.ChainClients[a.to.Chain].GetAccount(nil)
+	toAcct, err := a.user.ChainClients[a.to.Chain].GetAccount(nil)
 	if err != nil {
 		a.Log().Warn().Err(err).Msg("failed to get to account")
 		return OpResult{
@@ -427,7 +435,7 @@ func (a *SwapActor) verifyOutbound(config *OpConfig) OpResult {
 	}
 
 	// release user
-	a.account.Release()
+	a.user.Release()
 
 	return OpResult{
 		Finish: true,

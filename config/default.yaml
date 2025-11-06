@@ -9,7 +9,7 @@ bifrost:
     compaction_table_size_multiplier: 1
     write_buffer: 4194304
     block_cache_capacity: 8388608
-    compact_on_init: true
+    compact_on_init: false
   observer_workers: 0
 
   metrics:
@@ -140,6 +140,7 @@ bifrost:
         whitelist_tokens: []
         whitelist_cosmos_assets: []
         concurrency: 0
+        prefetch_blocks: 0
         max_gas_limit: 0
         fixed_gas_rate: 0
         gas_price_resolution: 1 # 1 sats/vbyte
@@ -194,7 +195,8 @@ bifrost:
       block_scanner:
         <<: *default-block-scanner
         gas_cache_blocks: 40
-        concurrency: 1
+        concurrency: 4
+        prefetch_blocks: 4
         chain_id: BASE
         observation_flexibility_blocks: 20
         max_gas_limit: 100000
@@ -276,7 +278,8 @@ bifrost:
       block_scanner:
         <<: *default-block-scanner
         max_reorg_rescan_blocks: 600 # 30m
-        concurrency: 1
+        concurrency: 4
+        prefetch_blocks: 4
         chain_id: BSC
         gas_cache_blocks: 40
         gas_price_resolution: 1 # gwei
@@ -835,7 +838,8 @@ bifrost:
 
 thor:
   node_relay_url: https://node-relay-bot.herokuapp.com
-  vault_pubkeys_cutoff_blocks: 1_000_000
+  # TODO: revert back to 1M after 3.12 migration for recovery attempts
+  vault_pubkeys_cutoff_blocks: 2_000_000
   seed_nodes_endpoint: https://thornode.ninerealms.com/thorchain/nodes
   stagenet_admin_addresses: "sthor1gdq9qejfy33jctztqdrg5v4hvxnytmvjhduacc" # 9R official stagenet
   api:
@@ -894,6 +898,9 @@ thor:
     state_sync:
       snapshot_interval: 0
       snapshot_keep_recent: 2
+    wasm:
+      query_gas_limit: 3000000
+      memory_cache_size: 100
   tendermint:
     log:
       level: info

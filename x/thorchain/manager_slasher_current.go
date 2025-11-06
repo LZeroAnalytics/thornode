@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
-	"strings"
 
 	"cosmossdk.io/core/comet"
 	"github.com/cometbft/cometbft/crypto"
@@ -235,7 +234,8 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 			// if the vault is frozen, reschedule to same vault with no changes
 			frozen := false
 			if len(vault.Frozen) > 0 {
-				chains, err := common.NewChains(vault.Frozen)
+				var chains common.Chains
+				chains, err = common.NewChains(vault.Frozen)
 				if err != nil {
 					ctx.Logger().Error("failed to convert chains", "error", err)
 				}
@@ -249,7 +249,7 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 						Memo:      toi.Memo,
 					}
 					eve := NewEventSecurity(etx, "frozen vault reschedule")
-					if err := mgr.EventMgr().EmitEvent(ctx, eve); err != nil {
+					if err = mgr.EventMgr().EmitEvent(ctx, eve); err != nil {
 						ctx.Logger().Error("fail to emit security event", "error", err)
 					}
 					frozen = true
@@ -298,7 +298,8 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 			}
 
 			if !frozen && s.needsNewVault(ctx, mgr, vault, signingTransPeriod, voter.FinalisedHeight, toi) {
-				active, err := s.keeper.GetAsgardVaultsByStatus(ctx, ActiveVault)
+				var active types.Vaults
+				active, err = s.keeper.GetAsgardVaultsByStatus(ctx, ActiveVault)
 				if err != nil {
 					return fmt.Errorf("fail to get active asgard vaults: %w", err)
 				}
@@ -320,7 +321,8 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 
 				available := active
 				mainCoin := toi.Coin
-				maxGasCoin, err := mgr.GasMgr().GetMaxGas(ctx, toi.Chain)
+				var maxGasCoin common.Coin
+				maxGasCoin, err = mgr.GasMgr().GetMaxGas(ctx, toi.Chain)
 				if err != nil {
 					ctx.Logger().Error("fail to get max gas", "error", err)
 				}
@@ -400,14 +402,14 @@ func (s *SlasherVCUR) LackSigning(ctx cosmos.Context, mgr Manager) error {
 				if !maxGasCoin.IsEmpty() {
 					toi.MaxGas = common.Gas{maxGasCoin}
 					// Update MaxGas in ObservedTxVoter action as well
-					if err := updateTxOutGas(ctx, s.keeper, toi, common.Gas{maxGasCoin}); err != nil {
+					if err = updateTxOutGas(ctx, s.keeper, toi, common.Gas{maxGasCoin}); err != nil {
 						ctx.Logger().Error("Failed to update MaxGas of action in ObservedTxVoter", "hash", toi.InHash, "error", err)
 					}
 				}
 				// Equals checks GasRate so update actions GasRate too (before updating in the queue item)
 				// for future updates of MaxGas, which must match for matchActionItem in AddOutTx.
 				gasRate := int64(mgr.GasMgr().GetGasRate(ctx, toi.Chain).Uint64())
-				if err := updateTxOutGasRate(ctx, s.keeper, toi, gasRate); err != nil {
+				if err = updateTxOutGasRate(ctx, s.keeper, toi, gasRate); err != nil {
 					ctx.Logger().Error("Failed to update GasRate of action in ObservedTxVoter", "hash", toi.InHash, "error", err)
 				}
 				toi.GasRate = gasRate
@@ -505,11 +507,18 @@ func (s *SlasherVCUR) SlashVault(ctx cosmos.Context, vaultPK common.PubKey, coin
 		totalRuneSlashed := cosmos.ZeroUint()
 		pauseOnSlashThreshold := mgr.Keeper().GetConfigInt64(ctx, constants.PauseOnSlashThreshold)
 		if pauseOnSlashThreshold > 0 && totalRuneToSlash.GTE(cosmos.NewUint(uint64(pauseOnSlashThreshold))) {
-			// set mimirs to pause the chain
-			key := fmt.Sprintf("Halt%sChain", coin.Asset.Chain)
-			s.keeper.SetMimir(ctx, key, ctx.BlockHeight())
-			mimirEvent := NewEventSetMimir(strings.ToUpper(key), strconv.FormatInt(ctx.BlockHeight(), 10))
-			if err := mgr.EventMgr().EmitEvent(ctx, mimirEvent); err != nil {
+			// set mimirs to pause signing
+			haltsignKey := fmt.Sprintf(constants.MimirTemplateHaltSigning, coin.Asset.Chain)
+			s.keeper.SetMimir(ctx, haltsignKey, ctx.BlockHeight())
+			mimirEvent1 := NewEventSetMimir(haltsignKey, strconv.FormatInt(ctx.BlockHeight(), 10))
+			if err := mgr.EventMgr().EmitEvent(ctx, mimirEvent1); err != nil {
+				ctx.Logger().Error("fail to emit set_mimir event", "error", err)
+			}
+			// set mimirs to pause trading
+			halttradeKey := fmt.Sprintf(constants.MimirTemplateHaltTrading, coin.Asset.Chain)
+			s.keeper.SetMimir(ctx, halttradeKey, ctx.BlockHeight())
+			mimirEvent2 := NewEventSetMimir(halttradeKey, strconv.FormatInt(ctx.BlockHeight(), 10))
+			if err := mgr.EventMgr().EmitEvent(ctx, mimirEvent2); err != nil {
 				ctx.Logger().Error("fail to emit set_mimir event", "error", err)
 			}
 		}

@@ -73,6 +73,7 @@ var (
 	NewVault                   = types.NewVault
 	NewVaultV2                 = types.NewVaultV2
 	NewReserveContributor      = types.NewReserveContributor
+	NewReferenceMemo           = types.NewReferenceMemo
 	NewTHORName                = types.NewTHORName
 	NewEventBond               = types.NewEventBond
 	NewEventMintBurn           = types.NewEventMintBurn
@@ -135,6 +136,7 @@ type (
 	TssKeygenMetric          = types.TssKeygenMetric
 	TssKeysignMetric         = types.TssKeysignMetric
 	ChainContract            = types.ChainContract
+	ReferenceMemo            = types.ReferenceMemo
 	THORName                 = types.THORName
 	THORNameAlias            = types.THORNameAlias
 	AffiliateFeeCollector    = types.AffiliateFeeCollector
@@ -156,11 +158,14 @@ type (
 	TCYStaker                = types.TCYStaker
 	OraclePrice              = types.OraclePrice
 	PriceFeed                = types.PriceFeed
+	Volume                   = types.Volume
+	VolumeBucket             = types.VolumeBucket
 
 	ProtoInt64        = types.ProtoInt64
 	ProtoUint64       = types.ProtoUint64
 	ProtoAccAddress   = types.ProtoAccAddress
 	ProtoAccAddresses = types.ProtoAccAddresses
+	ProtoString       = types.ProtoString
 	ProtoStrings      = types.ProtoStrings
 	ProtoUint         = common.ProtoUint
 	ProtoBools        = types.ProtoBools
