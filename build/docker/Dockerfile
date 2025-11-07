@@ -45,6 +45,7 @@ COPY --from=build /go/pkg/mod/github.com/!cosm!wasm/wasmvm/v2@v2.1.2/internal/ap
 
 COPY build/scripts /scripts
 
+COPY genesis.json /tmp/genesis.json
 # default to mainnet
 ARG TAG=mainnet
 ENV NET=$TAG
