@@ -18,6 +18,7 @@ import (
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/log"
+	corestore "cosmossdk.io/core/store"
 	storetypes "cosmossdk.io/store/types"
 	"cosmossdk.io/x/upgrade"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
@@ -65,6 +66,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/mint"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+
+	forkbankkeeper "gitlab.com/thorchain/thornode/v3/x/bloctopus/forkbank/keeper"
+	forking "gitlab.com/thorchain/thornode/v3/x/bloctopus/forking"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -148,7 +152,7 @@ type THORChainApp struct {
 	// keepers
 	AccountKeeper authkeeper.AccountKeeper
 	AuthzKeeper   authzkeeper.Keeper
-	BankKeeper    bankkeeper.BaseKeeper
+	BankKeeper    bankkeeper.Keeper
 	StakingKeeper *stakingkeeper.Keeper
 	MintKeeper    mintkeeper.Keeper
 	UpgradeKeeper *upgradekeeper.Keeper
@@ -306,14 +310,37 @@ func NewChainApp(
 		app.MsgServiceRouter(),
 		app.AccountKeeper,
 	)
-	app.BankKeeper = bankkeeper.NewBaseKeeper(
+	var bankStoreSvc corestore.KVStoreService
+	if cast.ToBool(appOpts.Get("fork.enabled")) {
+		bankStoreSvc = forking.NewKVStoreService(runtime.NewKVStoreService(keys[banktypes.StoreKey]))
+	} else {
+		bankStoreSvc = runtime.NewKVStoreService(keys[banktypes.StoreKey])
+	}
+	baseBank := bankkeeper.NewBaseKeeper(
 		app.appCodec,
-		runtime.NewKVStoreService(keys[banktypes.StoreKey]),
+		bankStoreSvc,
 		app.AccountKeeper,
 		BlockedAddresses(),
 		authtypes.NewModuleAddress(thorchain.ModuleName).String(),
 		logger,
 	)
+	app.BankKeeper = baseBank
+	if cast.ToBool(appOpts.Get("fork.enabled")) {
+		endpoint := cast.ToString(appOpts.Get("fork.grpc"))
+		if endpoint == "" {
+			endpoint = "grpc.thor.pfc.zone:443"
+		}
+		fbk, err := forkbankkeeper.NewForkingBankKeeper(baseBank, forkbankkeeper.Config{
+			Endpoint: endpoint,
+		})
+		if err != nil {
+			panic(err)
+		}
+		sdkCtx := app.BaseApp.NewUncachedContext(false, tmproto.Header{})
+		fbk.EnsureDenomMetadata(sdkCtx)
+
+		app.BankKeeper = &fbk
+	}
 
 	txSigningOptions, err := tx.NewDefaultSigningOptions()
 	if err != nil {
