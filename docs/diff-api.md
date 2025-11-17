@@ -25,6 +25,11 @@ Behavior
 - Sharding: server transparently reads flat and sharded layouts; you can enable sharding when generating diffs in the future without breaking compatibility.
 - Gzip: responses are compressed when the client requests it (and ENABLE_GZIP=1).
 
+Checkpoint tuning
+- Smaller intervals (e.g., 100–1,000): fastest /diffs/since responses; higher CPU/disk/inodes to build/keep checkpoints.
+- Larger intervals (e.g., 5,000–10,000): lower overhead; slower /diffs/since for large height jumps.
+- Choose based on latency vs. resource trade-off. Typical defaults: 1,000 for low latency; 5,000 if conserving resources.
+
 Applying patches to base genesis efficiently
 - The KV patch represents final values per (store,key) after folding from (base, H]. For O(1)-ish apply over a large base file:
   - Recommended: build a KV index representation of the base state once (keyed by (store,key)), then stream-apply the patch to that index and re-materialize JSON if required.
